@@ -46,19 +46,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // open login page
   Future<void> openLoginPage() async {
-    Map<String, dynamic> arg = {'appId': appId, 'phone': phoneOrEmail};
-    try {
-      await _otplessFlutterPlugin.openLoginPage(onHeadlessResult, arg);
-    } catch (e) {
-      log("Error opening login page: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Failed to open login page. Please try again."),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
+  Navigator.pushAndRemoveUntil(
+    context,
+    MaterialPageRoute(
+      builder: (context) => const HomeScreen(),
+    ),
+    (route) => false,
+  );
+}
 
   // on headless result
   void onHeadlessResult(dynamic result) {

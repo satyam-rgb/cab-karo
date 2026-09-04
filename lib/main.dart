@@ -1,11 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:karocab/screens/onboarding_screen.dart';
-
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
   runApp(const MyApp());
 }
 
@@ -16,7 +15,6 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      //home: Screen0(),
       initialRoute: '/',
       routes: {
         '/': (context) => const OnboardingScreen(),
@@ -26,4 +24,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
