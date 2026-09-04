@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:developer' as dev;
-import 'dart:math';
 
 import 'package:external_app_launcher/external_app_launcher.dart';
 import 'package:flutter/material.dart';
@@ -22,80 +21,140 @@ class HomeScreen extends StatefulWidget {
 }
 
 class HomeScreenState extends State<HomeScreen> {
-  // default camera position
-  static const _defaultCameraPosition = CameraPosition(
+  // ============================================================
+  // PRICING DATA
+  // ============================================================
+
+  Map<String, dynamic> _pricingData = {};
+
+  // ============================================================
+  // DEFAULT CAMERA POSITION
+  // ============================================================
+
+  static const CameraPosition _defaultCameraPosition =
+      CameraPosition(
     target: LatLng(21.1458, 79.0882),
     zoom: 11.5,
     tilt: 60.0,
   );
 
-  // google map controller
-  late GoogleMapController _googleMapController;
+  // ============================================================
+  // GOOGLE MAP CONTROLLER
+  // ============================================================
 
-  // latitude and longitude
+  GoogleMapController? _googleMapController;
+
+  // ============================================================
+  // CURRENT LOCATION
+  // ============================================================
+
   double? latitude;
   double? longitude;
 
-  // initial camera position
   CameraPosition? _initialCameraPosition;
 
-  // markers
+  // ============================================================
+  // MARKERS
+  // ============================================================
+
   Map<MarkerId, Marker> markers = {};
 
-  // polylines
+  // ============================================================
+  // POLYLINES
+  // ============================================================
+
   Map<PolylineId, Polyline> polylines = {};
 
-  // polyline coordinates
   List<LatLng> polylineCoordinates = [];
 
-  // from controller
-  final TextEditingController fromController = TextEditingController();
+  // ============================================================
+  // TEXT CONTROLLERS
+  // ============================================================
 
-  // to controller
-  final TextEditingController toController = TextEditingController();
+  final TextEditingController fromController =
+      TextEditingController();
 
-  // total distance and duration
+  final TextEditingController toController =
+      TextEditingController();
+
+  // ============================================================
+  // DISTANCE / DURATION
+  // ============================================================
+
   String totalDistance = '';
   String totalDuration = '';
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
-
-    // set current location
     _setCurrentLocation();
   }
 
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
-    _googleMapController.dispose();
+    _googleMapController?.dispose();
     fromController.dispose();
     toController.dispose();
     super.dispose();
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+
+      // ========================================================
+      // APP BAR
+      // ========================================================
+
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.chat),
+          icon: const Icon(Icons.chat_rounded),
+          tooltip: 'KaroAI',
           onPressed: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const ChatScreen(),
+                builder: (context) => ChatScreen(
+                  rideContext: _pricingData,
+                ),
               ),
             );
           },
         ),
+
         centerTitle: true,
-        title: const Text('Karocab'),
+
+        title: const Text(
+          'Karocab',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
+
+      // ========================================================
+      // BODY
+      // ========================================================
+
       body: Column(
         children: [
-          // google map
+          // ======================================================
+          // GOOGLE MAP
+          // ======================================================
+
           Expanded(
             child: ClipRRect(
               borderRadius: const BorderRadius.only(
@@ -104,27 +163,34 @@ class HomeScreenState extends State<HomeScreen> {
               ),
               child: GoogleMap(
                 onMapCreated: (controller) {
-                  setState(() {
-                    _googleMapController = controller;
+                  _googleMapController = controller;
 
-                    _googleMapController.animateCamera(
-                      CameraUpdate.newCameraPosition(
-                        CameraPosition(
-                          target: _initialCameraPosition?.target ??
-                              _defaultCameraPosition.target,
-                          zoom: _initialCameraPosition?.zoom ??
-                              _defaultCameraPosition.zoom,
-                          tilt: 45.0,
-                          bearing: 0.0,
-                        ),
+                  controller.animateCamera(
+                    CameraUpdate.newCameraPosition(
+                      CameraPosition(
+                        target: _initialCameraPosition?.target ??
+                            _defaultCameraPosition.target,
+                        zoom: _initialCameraPosition?.zoom ??
+                            _defaultCameraPosition.zoom,
+                        tilt: 45.0,
+                        bearing: 0.0,
                       ),
-                    );
-                  });
+                    ),
+                  );
                 },
+
                 initialCameraPosition:
-                    _initialCameraPosition ?? _defaultCameraPosition,
-                markers: Set<Marker>.of(markers.values),
-                polylines: Set<Polyline>.of(polylines.values),
+                    _initialCameraPosition ??
+                        _defaultCameraPosition,
+
+                markers: Set<Marker>.of(
+                  markers.values,
+                ),
+
+                polylines: Set<Polyline>.of(
+                  polylines.values,
+                ),
+
                 myLocationEnabled: true,
                 myLocationButtonEnabled: true,
                 zoomControlsEnabled: false,
@@ -137,32 +203,46 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          buildHeight(deviceHeight(context) * 0.02),
+          buildHeight(
+            deviceHeight(context) * 0.02,
+          ),
 
-          // from text field
+          // ======================================================
+          // FROM
+          // ======================================================
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10.0),
             child: TextField(
               controller: fromController,
               decoration: InputDecoration(
                 hintText: 'Where From?',
                 labelText: 'From',
-                prefixIcon: const Icon(Icons.location_on),
+                prefixIcon: const Icon(
+                  Icons.location_on,
+                ),
                 filled: true,
                 fillColor: Colors.grey[200],
+
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius:
+                      BorderRadius.circular(10.0),
                   borderSide: BorderSide.none,
                 ),
+
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius:
+                      BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: AppPallete.buttonGradient1,
                     width: 1.0,
                   ),
                 ),
+
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius:
+                      BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: Colors.blue,
                     width: 2.0,
@@ -172,32 +252,46 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          buildHeight(deviceHeight(context) * 0.02),
+          buildHeight(
+            deviceHeight(context) * 0.02,
+          ),
 
-          // to text field
+          // ======================================================
+          // TO
+          // ======================================================
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10.0),
             child: TextField(
               controller: toController,
               decoration: InputDecoration(
                 hintText: 'Where To?',
                 labelText: 'To',
-                prefixIcon: const Icon(Icons.flag),
+                prefixIcon: const Icon(
+                  Icons.flag_rounded,
+                ),
                 filled: true,
                 fillColor: Colors.grey[200],
+
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius:
+                      BorderRadius.circular(10.0),
                   borderSide: BorderSide.none,
                 ),
+
                 enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius:
+                      BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: AppPallete.buttonGradient1,
                     width: 1.0,
                   ),
                 ),
+
                 focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius:
+                      BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: Colors.blue,
                     width: 2.0,
@@ -207,87 +301,167 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          buildHeight(deviceHeight(context) * 0.02),
+          buildHeight(
+            deviceHeight(context) * 0.02,
+          ),
 
-          // submit button
+          // ======================================================
+          // SUBMIT
+          // ======================================================
+
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10.0),
             child: CustomButton.buildCustomButton(
               context: context,
               isArrowVisible: false,
+
               onPressed: () async {
+                if (fromController.text.trim().isEmpty ||
+                    toController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Please enter both From and To locations.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+
                 try {
                   await _setOriginAndDestination();
+
+                  if (!mounted) return;
+
                   await _getRoute();
+
+                  if (!mounted) return;
+
                   await _showPricingDialog();
                 } catch (e) {
                   dev.log('Error: $e');
 
+                  if (!mounted) return;
+
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('An error occurred: $e'),
+                      content: Text(
+                        'An error occurred: $e',
+                      ),
                     ),
                   );
                 }
               },
-              text: "Submit ",
+
+              text: 'Submit',
             ),
           ),
 
-          if (totalDistance.isNotEmpty && totalDuration.isNotEmpty)
+          // ======================================================
+          // DISTANCE / DURATION
+          // ======================================================
+
+          if (totalDistance.isNotEmpty &&
+              totalDuration.isNotEmpty)
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Text(
-                'Distance: $totalDistance, Duration: $totalDuration',
-                style: const TextStyle(fontSize: 16),
+                'Distance: $totalDistance, '
+                'Duration: $totalDuration',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
 
-          buildHeight(deviceHeight(context) * 0.04),
+          buildHeight(
+            deviceHeight(context) * 0.04,
+          ),
         ],
       ),
     );
   }
 
-  // _setCurrentLocation method
+  // ============================================================
+  // CURRENT LOCATION
+  // ============================================================
+
   Future<void> _setCurrentLocation() async {
-    LocationPermission permission = await Geolocator.checkPermission();
+    try {
+      LocationPermission permission =
+          await Geolocator.checkPermission();
 
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
+      if (permission == LocationPermission.denied) {
+        permission =
+            await Geolocator.requestPermission();
+      }
 
-    if (permission == LocationPermission.deniedForever) {
-      dev.log('Location permissions are permanently denied.');
-    } else {
-      Position position = await Geolocator.getCurrentPosition(
+      if (permission == LocationPermission.denied) {
+        dev.log('Location permission denied.');
+        return;
+      }
+
+      if (permission ==
+          LocationPermission.deniedForever) {
+        dev.log(
+          'Location permissions are permanently denied.',
+        );
+        return;
+      }
+
+      final Position position =
+          await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
         ),
       );
 
+      if (!mounted) return;
+
       setState(() {
         latitude = position.latitude;
         longitude = position.longitude;
 
-        _initialCameraPosition = CameraPosition(
-          target: LatLng(latitude!, longitude!),
+        _initialCameraPosition =
+            CameraPosition(
+          target: LatLng(
+            latitude!,
+            longitude!,
+          ),
           zoom: 14.5,
           tilt: 45.0,
         );
       });
+
+      if (_googleMapController != null) {
+        await _googleMapController!.animateCamera(
+          CameraUpdate.newCameraPosition(
+            _initialCameraPosition!,
+          ),
+        );
+      }
+    } catch (e) {
+      dev.log(
+        'Error getting current location: $e',
+      );
     }
   }
 
-  // _addMarker method
+  // ============================================================
+  // ADD MARKER
+  // ============================================================
+
   void _addMarker(
     LatLng position,
     String id,
     BitmapDescriptor descriptor,
   ) {
-    MarkerId markerId = MarkerId(id);
+    final MarkerId markerId =
+        MarkerId(id);
 
-    Marker marker = Marker(
+    final Marker marker = Marker(
       markerId: markerId,
       icon: descriptor,
       position: position,
@@ -295,71 +469,108 @@ class HomeScreenState extends State<HomeScreen> {
 
     markers[markerId] = marker;
 
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
-  // _setOriginAndDestination method
+  // ============================================================
+  // SET ORIGIN + DESTINATION
+  // ============================================================
+
   Future<void> _setOriginAndDestination() async {
     try {
-      List<Location> originLocations =
-          await locationFromAddress(fromController.text);
+      final String from =
+          fromController.text.trim();
 
-      List<Location> destinationLocations =
-          await locationFromAddress(toController.text);
+      final String to =
+          toController.text.trim();
 
-      if (originLocations.isNotEmpty &&
-          destinationLocations.isNotEmpty) {
-        LatLng originLatLng = LatLng(
-          originLocations.first.latitude,
-          originLocations.first.longitude,
+      final List<Location> originLocations =
+          await locationFromAddress(from);
+
+      final List<Location> destinationLocations =
+          await locationFromAddress(to);
+
+      if (originLocations.isEmpty ||
+          destinationLocations.isEmpty) {
+        throw Exception(
+          'Could not find one or both locations.',
         );
+      }
 
-        LatLng destinationLatLng = LatLng(
-          destinationLocations.first.latitude,
-          destinationLocations.first.longitude,
-        );
+      final LatLng originLatLng = LatLng(
+        originLocations.first.latitude,
+        originLocations.first.longitude,
+      );
 
-        _addMarker(
-          originLatLng,
-          "origin",
-          BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen,
+      final LatLng destinationLatLng = LatLng(
+        destinationLocations.first.latitude,
+        destinationLocations.first.longitude,
+      );
+
+      // Clear old route data.
+      markers.clear();
+      polylines.clear();
+      polylineCoordinates.clear();
+
+      // Origin marker.
+      _addMarker(
+        originLatLng,
+        'origin',
+        BitmapDescriptor.defaultMarkerWithHue(
+          BitmapDescriptor.hueGreen,
+        ),
+      );
+
+      // Destination marker.
+      _addMarker(
+        destinationLatLng,
+        'destination',
+        BitmapDescriptor.defaultMarkerWithHue(
+          BitmapDescriptor.hueRed,
+        ),
+      );
+
+      final LatLngBounds bounds =
+          LatLngBounds(
+        southwest: LatLng(
+          originLatLng.latitude <
+                  destinationLatLng.latitude
+              ? originLatLng.latitude
+              : destinationLatLng.latitude,
+
+          originLatLng.longitude <
+                  destinationLatLng.longitude
+              ? originLatLng.longitude
+              : destinationLatLng.longitude,
+        ),
+
+        northeast: LatLng(
+          originLatLng.latitude >
+                  destinationLatLng.latitude
+              ? originLatLng.latitude
+              : destinationLatLng.latitude,
+
+          originLatLng.longitude >
+                  destinationLatLng.longitude
+              ? originLatLng.longitude
+              : destinationLatLng.longitude,
+        ),
+      );
+
+      if (_googleMapController != null) {
+        await _googleMapController!.animateCamera(
+          CameraUpdate.newLatLngBounds(
+            bounds,
+            50,
           ),
-        );
-
-        _addMarker(
-          destinationLatLng,
-          "destination",
-          BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueRed,
-          ),
-        );
-
-        LatLngBounds bounds = LatLngBounds(
-          southwest: LatLng(
-            originLatLng.latitude < destinationLatLng.latitude
-                ? originLatLng.latitude
-                : destinationLatLng.latitude,
-            originLatLng.longitude < destinationLatLng.longitude
-                ? originLatLng.longitude
-                : destinationLatLng.longitude,
-          ),
-          northeast: LatLng(
-            originLatLng.latitude > destinationLatLng.latitude
-                ? originLatLng.latitude
-                : destinationLatLng.latitude,
-            originLatLng.longitude > destinationLatLng.longitude
-                ? originLatLng.longitude
-                : destinationLatLng.longitude,
-          ),
-        );
-
-        _googleMapController.animateCamera(
-          CameraUpdate.newLatLngBounds(bounds, 50),
         );
       }
     } catch (e) {
-      dev.log('Error in _setOriginAndDestination: $e');
+      dev.log(
+        'Error in _setOriginAndDestination: $e',
+      );
 
       throw Exception(
         'Failed to set origin and destination: $e',
@@ -367,56 +578,117 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // _getRoute method
+  // ============================================================
+  // GET ROUTE FROM OSRM
+  // ============================================================
+
   Future<void> _getRoute() async {
-    if (markers.length < 2) return;
+    if (markers.length < 2) {
+      throw Exception(
+        'Origin and destination are required.',
+      );
+    }
 
-    LatLng origin = markers[const MarkerId("origin")]!.position;
+    final Marker? originMarker =
+        markers[const MarkerId('origin')];
 
-    LatLng destination =
-        markers[const MarkerId("destination")]!.position;
+    final Marker? destinationMarker =
+        markers[const MarkerId('destination')];
 
-    String url =
-        'http://router.project-osrm.org/route/v1/driving/'
+    if (originMarker == null ||
+        destinationMarker == null) {
+      throw Exception(
+        'Route locations are missing.',
+      );
+    }
+
+    final LatLng origin =
+        originMarker.position;
+
+    final LatLng destination =
+        destinationMarker.position;
+
+    final String url =
+        'https://router.project-osrm.org/route/v1/driving/'
         '${origin.longitude},${origin.latitude};'
         '${destination.longitude},${destination.latitude}'
         '?overview=full&geometries=polyline';
 
-    var response = await http.get(Uri.parse(url));
+    final http.Response response =
+        await http.get(
+      Uri.parse(url),
+    );
 
-    if (response.statusCode == 200) {
-      var data = json.decode(response.body);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to get route. '
+        'Status: ${response.statusCode}',
+      );
+    }
 
-      String encodedPolyline =
-          data['routes'][0]['geometry'];
+    final dynamic decoded =
+        json.decode(response.body);
 
-      polylineCoordinates =
-          _decodePolyline(encodedPolyline);
+    final List<dynamic> routes =
+        decoded['routes'] as List<dynamic>;
 
-      totalDistance =
-          (data['routes'][0]['distance'] / 1000)
-                  .toStringAsFixed(2) +
-              ' km';
+    if (routes.isEmpty) {
+      throw Exception(
+        'No route found.',
+      );
+    }
 
-      totalDuration =
-          (data['routes'][0]['duration'] / 60)
-                  .toStringAsFixed(0) +
-              ' minutes';
+    final Map<String, dynamic> route =
+        Map<String, dynamic>.from(
+      routes.first as Map,
+    );
 
-      _addPolyLine();
+    final String encodedPolyline =
+        route['geometry']?.toString() ?? '';
 
+    if (encodedPolyline.isEmpty) {
+      throw Exception(
+        'Route geometry unavailable.',
+      );
+    }
+
+    polylineCoordinates =
+        _decodePolyline(
+      encodedPolyline,
+    );
+
+    final double distanceKm =
+        (route['distance'] as num).toDouble() /
+            1000;
+
+    final double durationMinutes =
+        (route['duration'] as num).toDouble() /
+            60;
+
+    totalDistance =
+        '${distanceKm.toStringAsFixed(2)} km';
+
+    totalDuration =
+        '${durationMinutes.toStringAsFixed(0)} minutes';
+
+    _addPolyLine();
+
+    if (mounted) {
       setState(() {});
-    } else {
-      dev.log('Failed to get route');
     }
   }
 
-  // _decodePolyline method
-  List<LatLng> _decodePolyline(String encoded) {
-    List<LatLng> poly = [];
+  // ============================================================
+  // DECODE POLYLINE
+  // ============================================================
+
+  List<LatLng> _decodePolyline(
+    String encoded,
+  ) {
+    final List<LatLng> poly = [];
 
     int index = 0;
-    int len = encoded.length;
+    final int len = encoded.length;
 
     int lat = 0;
     int lng = 0;
@@ -427,15 +699,19 @@ class HomeScreenState extends State<HomeScreen> {
       int result = 0;
 
       do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
+        b =
+            encoded.codeUnitAt(index++) - 63;
+
+        result |=
+            (b & 0x1f) << shift;
+
         shift += 5;
       } while (b >= 0x20);
 
-      int dlat =
-          ((result & 1) != 0
+      final int dlat =
+          ((result & 1) != 0)
               ? ~(result >> 1)
-              : (result >> 1));
+              : (result >> 1);
 
       lat += dlat;
 
@@ -443,35 +719,48 @@ class HomeScreenState extends State<HomeScreen> {
       result = 0;
 
       do {
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
+        b =
+            encoded.codeUnitAt(index++) - 63;
+
+        result |=
+            (b & 0x1f) << shift;
+
         shift += 5;
       } while (b >= 0x20);
 
-      int dlng =
-          ((result & 1) != 0
+      final int dlng =
+          ((result & 1) != 0)
               ? ~(result >> 1)
-              : (result >> 1));
+              : (result >> 1);
 
       lng += dlng;
 
-      double latitude = lat / 1E5;
-      double longitude = lng / 1E5;
+      final double decodedLatitude =
+          lat / 1E5;
+
+      final double decodedLongitude =
+          lng / 1E5;
 
       poly.add(
-        LatLng(latitude, longitude),
+        LatLng(
+          decodedLatitude,
+          decodedLongitude,
+        ),
       );
     }
 
     return poly;
   }
 
-  // _addPolyLine method
-  void _addPolyLine() {
-    PolylineId id =
-        const PolylineId("polyline_id");
+  // ============================================================
+  // ADD POLYLINE
+  // ============================================================
 
-    Polyline polyline = Polyline(
+  void _addPolyLine() {
+    const PolylineId id =
+        PolylineId('polyline_id');
+
+    final Polyline polyline = Polyline(
       polylineId: id,
       color: Colors.blue,
       points: polylineCoordinates,
@@ -480,8 +769,14 @@ class HomeScreenState extends State<HomeScreen> {
 
     polylines[id] = polyline;
 
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
+
+  // ============================================================
+  // HEIGHT HELPER
+  // ============================================================
 
   Widget buildHeight(double height) {
     return SizedBox(
@@ -489,268 +784,572 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // _showPricingDialog method
+  // ============================================================
+  // PRICING DIALOG
+  // ============================================================
+
   Future<void> _showPricingDialog() async {
     try {
-      Map<String, dynamic> pricingData =
+      final Map<String, dynamic> pricingData =
           await _fetchPricingData();
 
-      showDialog(
+      _pricingData = pricingData;
+
+      final List<dynamic> rides =
+          pricingData['rides'] ?? [];
+
+      // --------------------------------------------------------
+      // FIND RIDE BY ID
+      // --------------------------------------------------------
+
+      Map<String, dynamic> getRide(
+        String? id,
+      ) {
+        if (id == null) {
+          return <String, dynamic>{};
+        }
+
+        for (final dynamic item in rides) {
+          if (item is Map &&
+              item['id']?.toString() == id) {
+            return Map<String, dynamic>.from(
+              item,
+            );
+          }
+        }
+
+        return <String, dynamic>{};
+      }
+
+      final Map<String, dynamic> recommendations =
+          pricingData['recommendations']
+                  is Map
+              ? Map<String, dynamic>.from(
+                  pricingData['recommendations'],
+                )
+              : <String, dynamic>{};
+
+      final Map<String, dynamic> bestOverall =
+          getRide(
+        recommendations['bestOverall']
+            ?.toString(),
+      );
+
+      final Map<String, dynamic> bestBudget =
+          getRide(
+        recommendations['bestBudget']
+            ?.toString(),
+      );
+
+      final Map<String, dynamic> fastest =
+          getRide(
+        recommendations['fastest']
+            ?.toString(),
+      );
+
+      if (!mounted) return;
+
+      // --------------------------------------------------------
+      // SHOW DIALOG
+      // --------------------------------------------------------
+
+      await showDialog<void>(
         context: context,
-        builder: (BuildContext context) {
+        builder: (BuildContext dialogContext) {
           return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20.0),
-            ),
-            elevation: 0,
             backgroundColor: Colors.transparent,
+
+            insetPadding:
+                const EdgeInsets.symmetric(
+              horizontal: 18,
+              vertical: 24,
+            ),
+
             child: Container(
               constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.85,
+                maxHeight:
+                    MediaQuery.of(dialogContext)
+                            .size
+                            .height *
+                        0.88,
               ),
-              padding: const EdgeInsets.all(20),
+
               decoration: BoxDecoration(
-                shape: BoxShape.rectangle,
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius:
+                    BorderRadius.circular(28),
+
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
-                    blurRadius: 10.0,
-                    offset: Offset(0.0, 10.0),
+                    blurRadius: 25,
+                    offset: Offset(0, 12),
                   ),
                 ],
               ),
 
-              // IMPORTANT:
-              // Scrollable popup so Recommendations are visible.
               child: SingleChildScrollView(
+                padding:
+                    const EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  18,
+                ),
+
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+
                   children: [
-                    const Text(
-                      'Cab Pricing',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    // ==================================================
+                    // HEADER
+                    // ==================================================
 
-                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
 
-                    // Ola Cab
-                    _buildPriceRow(
-                      'Ola Cab',
-                      (pricingData['rides']
-                                  ?.firstWhere(
-                                (ride) =>
-                                    ride['id'] == 'olaCab',
-                                orElse: () =>
-                                    <String, dynamic>{},
-                              )['fare'] ??
-                              'N/A')
-                          .toString(),
-                      Icons.local_taxi,
-                    ),
-
-                    // Ola Auto
-                    _buildPriceRow(
-                      'Ola Auto',
-                      (pricingData['rides']
-                                  ?.firstWhere(
-                                (ride) =>
-                                    ride['id'] == 'olaAuto',
-                                orElse: () =>
-                                    <String, dynamic>{},
-                              )['fare'] ??
-                              'N/A')
-                          .toString(),
-                      Icons.electric_rickshaw,
-                    ),
-
-                    // Uber Cab
-                    _buildPriceRow(
-                      'Uber Cab',
-                      (pricingData['rides']
-                                  ?.firstWhere(
-                                (ride) =>
-                                    ride['id'] == 'uberCab',
-                                orElse: () =>
-                                    <String, dynamic>{},
-                              )['fare'] ??
-                              'N/A')
-                          .toString(),
-                      Icons.local_taxi,
-                    ),
-
-                    // Uber Auto
-                    _buildPriceRow(
-                      'Uber Auto',
-                      (pricingData['rides']
-                                  ?.firstWhere(
-                                (ride) =>
-                                    ride['id'] == 'uberAuto',
-                                orElse: () =>
-                                    <String, dynamic>{},
-                              )['fare'] ??
-                              'N/A')
-                          .toString(),
-                      Icons.electric_rickshaw,
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // KaroScore heading
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'KaroScore',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // KaroScore list
-                    ...List<Widget>.from(
-                      (pricingData['rides'] ?? [])
-                          .map<Widget>((ride) {
-                        return Padding(
-                          padding:
-                              const EdgeInsets.symmetric(
-                            vertical: 4,
+                          decoration:
+                              BoxDecoration(
+                            color: Colors.blue
+                                .withOpacity(0.10),
+                            borderRadius:
+                                BorderRadius.circular(
+                              15,
+                            ),
                           ),
-                          child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+
+                          child: const Icon(
+                            Icons
+                                .local_taxi_rounded,
+                            color: Colors.blue,
+                            size: 27,
+                          ),
+                        ),
+
+                        const SizedBox(
+                          width: 12,
+                        ),
+
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment:
+                                CrossAxisAlignment
+                                    .start,
                             children: [
                               Text(
-                                '${ride['provider']} ${ride['category']}',
-                                style: const TextStyle(
-                                  fontSize: 15,
+                                'Cab Comparison',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight:
+                                      FontWeight.w800,
                                 ),
                               ),
+                              SizedBox(
+                                height: 3,
+                              ),
                               Text(
-                                '${ride['karoScore']}/100',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
+                                'Compare your available ride options',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      Colors.grey,
                                 ),
                               ),
                             ],
                           ),
-                        );
-                      }),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // Recommendations heading
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Recommendations',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Best Overall
-                    _buildRecommendationRow(
-                      '🏆 Best Overall',
-                      (pricingData['rides'] ?? [])
-                          .firstWhere(
-                        (ride) =>
-                            ride['id'] ==
-                            pricingData['recommendations']
-                                ?['bestOverall'],
-                        orElse: () =>
-                            <String, dynamic>{},
-                      ),
-                    ),
-
-                    // Best Budget
-                    _buildRecommendationRow(
-                      '💰 Best Budget',
-                      (pricingData['rides'] ?? [])
-                          .firstWhere(
-                        (ride) =>
-                            ride['id'] ==
-                            pricingData['recommendations']
-                                ?['bestBudget'],
-                        orElse: () =>
-                            <String, dynamic>{},
-                      ),
-                    ),
-
-                    // Fastest
-                    _buildRecommendationRow(
-                      '⚡ Fastest',
-                      (pricingData['rides'] ?? [])
-                          .firstWhere(
-                        (ride) =>
-                            ride['id'] ==
-                            pricingData['recommendations']
-                                ?['fastest'],
-                        orElse: () =>
-                            <String, dynamic>{},
-                      ),
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    const SizedBox(height: 24),
-
-                    // Open provider buttons
-                    Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildActionButton(
-                          'Open Ola',
-                          Colors.yellow[700]!,
-                          () async {
-                            await LaunchApp.openApp(
-                              androidPackageName:
-                                  'com.olacabs.customer',
-                              openStore: false,
-                            );
-                          },
                         ),
 
-                        _buildActionButton(
-                          'Open Uber',
-                          Colors.black,
-                          () async {
-                            await LaunchApp.openApp(
-                              androidPackageName:
-                                  'com.ubercab',
-                              openStore: false,
-                            );
-                          },
+                        IconButton(
+                          onPressed: () =>
+                              Navigator.pop(
+                            dialogContext,
+                          ),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                          ),
                         ),
                       ],
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(
+                      height: 18,
+                    ),
 
-                    TextButton(
-                      child: const Text(
-                        'Close',
+                    // ==================================================
+                    // TRIP INFORMATION
+                    // ==================================================
+
+                    Container(
+                      width: double.infinity,
+
+                      padding:
+                          const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 12,
+                      ),
+
+                      decoration:
+                          BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius:
+                            BorderRadius.circular(
+                          16,
+                        ),
+                      ),
+
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.route_rounded,
+                            size: 20,
+                            color: Colors.blue,
+                          ),
+
+                          const SizedBox(
+                            width: 9,
+                          ),
+
+                          Expanded(
+                            child: Text(
+                              '$totalDistance  •  '
+                              '$totalDuration',
+                              style:
+                                  const TextStyle(
+                                fontWeight:
+                                    FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    // ==================================================
+                    // AVAILABLE RIDES
+                    // ==================================================
+
+                    const Text(
+                      'Available Rides',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight:
+                            FontWeight.w800,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 10,
+                    ),
+
+                    ...rides.map<Widget>(
+                      (dynamic ride) {
+                        if (ride is! Map) {
+                          return const SizedBox
+                              .shrink();
+                        }
+
+                        return _buildRideCard(
+                          provider:
+                              ride['provider']
+                                      ?.toString() ??
+                                  'Unknown',
+
+                          category:
+                              ride['category']
+                                      ?.toString() ??
+                                  '',
+
+                          fare:
+                              ride['fare']
+                                      ?.toString() ??
+                                  'N/A',
+
+                          eta:
+                              ride['eta']
+                                      ?.toString() ??
+                                  'N/A',
+
+                          score:
+                              ride['karoScore']
+                                      ?.toString() ??
+                                  'N/A',
+                        );
+                      },
+                    ),
+
+                    const SizedBox(
+                      height: 10,
+                    ),
+
+                    // ==================================================
+                    // KAROSCORE
+                    // ==================================================
+
+                    Container(
+                      width: double.infinity,
+
+                      padding:
+                          const EdgeInsets.all(16),
+
+                      decoration:
+                          BoxDecoration(
+                        gradient:
+                            LinearGradient(
+                          colors: [
+                            Colors.blue.shade50,
+                            Colors.white,
+                          ],
+                        ),
+
+                        borderRadius:
+                            BorderRadius.circular(
+                          20,
+                        ),
+
+                        border: Border.all(
+                          color: Colors.blue
+                              .withOpacity(0.15),
+                        ),
+                      ),
+
+                      child: Column(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(
+                                Icons
+                                    .auto_awesome_rounded,
+                                color: Colors.blue,
+                                size: 22,
+                              ),
+                              SizedBox(
+                                width: 8,
+                              ),
+                              Text(
+                                'KaroScore',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight:
+                                      FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          const SizedBox(
+                            height: 12,
+                          ),
+
+                          ...rides.map<Widget>(
+                            (dynamic ride) {
+                              if (ride is! Map) {
+                                return const SizedBox
+                                    .shrink();
+                              }
+
+                              final String score =
+                                  ride['karoScore']
+                                          ?.toString() ??
+                                      'N/A';
+
+                              return Padding(
+                                padding:
+                                    const EdgeInsets
+                                        .symmetric(
+                                  vertical: 5,
+                                ),
+
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '${ride['provider']} '
+                                        '${ride['category']}',
+                                        style:
+                                            const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight:
+                                              FontWeight
+                                                  .w500,
+                                        ),
+                                      ),
+                                    ),
+
+                                    Container(
+                                      padding:
+                                          const EdgeInsets
+                                              .symmetric(
+                                        horizontal: 9,
+                                        vertical: 5,
+                                      ),
+
+                                      decoration:
+                                          BoxDecoration(
+                                        color: Colors
+                                            .blue
+                                            .withOpacity(
+                                          0.10,
+                                        ),
+                                        borderRadius:
+                                            BorderRadius
+                                                .circular(
+                                          10,
+                                        ),
+                                      ),
+
+                                      child: Text(
+                                        '$score/100',
+                                        style:
+                                            const TextStyle(
+                                          color:
+                                              Colors.blue,
+                                          fontSize: 13,
+                                          fontWeight:
+                                              FontWeight
+                                                  .w800,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    // ==================================================
+                    // SMART RECOMMENDATIONS
+                    // ==================================================
+
+                    const Text(
+                      'Smart Recommendations',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight:
+                            FontWeight.w800,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 10,
+                    ),
+
+                    _buildRecommendationCard(
+                      emoji: '🏆',
+                      title: 'Best Overall',
+                      ride: bestOverall,
+                    ),
+
+                    _buildRecommendationCard(
+                      emoji: '💰',
+                      title: 'Best Budget',
+                      ride: bestBudget,
+                    ),
+
+                    _buildRecommendationCard(
+                      emoji: '⚡',
+                      title: 'Fastest',
+                      ride: fastest,
+                    ),
+
+                    const SizedBox(
+                      height: 20,
+                    ),
+
+                    // ==================================================
+                    // OPEN PROVIDER BUTTONS
+                    // ==================================================
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child:
+                              _buildActionButton(
+                            'Open Ola',
+                            Colors.yellow[700]!,
+                            () async {
+                              try {
+                                await LaunchApp
+                                    .openApp(
+                                  androidPackageName:
+                                      'com.olacabs.customer',
+                                  openStore: false,
+                                );
+                              } catch (e) {
+                                dev.log(
+                                  'Could not open Ola: $e',
+                                );
+                              }
+                            },
+                          ),
+                        ),
+
+                        const SizedBox(
+                          width: 12,
+                        ),
+
+                        Expanded(
+                          child:
+                              _buildActionButton(
+                            'Open Uber',
+                            Colors.black,
+                            () async {
+                              try {
+                                await LaunchApp
+                                    .openApp(
+                                  androidPackageName:
+                                      'com.ubercab',
+                                  openStore: false,
+                                );
+                              } catch (e) {
+                                dev.log(
+                                  'Could not open Uber: $e',
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
+                    // ==================================================
+                    // DISCLAIMER
+                    // ==================================================
+
+                    const Center(
+                      child: Text(
+                        'Fares shown are KaroCab '
+                        'estimated/simulated values',
+                        textAlign:
+                            TextAlign.center,
                         style: TextStyle(
+                          fontSize: 11,
                           color: Colors.grey,
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                      },
                     ),
                   ],
                 ),
@@ -764,6 +1363,8 @@ class HomeScreenState extends State<HomeScreen> {
         'Error showing pricing dialog: $e',
       );
 
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -774,113 +1375,333 @@ class HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Recommendation row
-  Widget _buildRecommendationRow(
-    String title,
-    dynamic recommendation,
-  ) {
-    if (recommendation == null ||
-        recommendation is! Map ||
-        recommendation.isEmpty) {
-      return Padding(
+  // ============================================================
+  // RIDE CARD
+  // ============================================================
+
+  Widget _buildRideCard({
+    required String provider,
+    required String category,
+    required String fare,
+    required String eta,
+    required String score,
+  }) {
+    final bool isAuto =
+        category.toLowerCase().contains('auto');
+
+    return Container(
+      margin:
+          const EdgeInsets.only(bottom: 10),
+
+      padding:
+          const EdgeInsets.all(14),
+
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+
+        borderRadius:
+            BorderRadius.circular(18),
+
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ),
+
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 6,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+
+      child: Row(
+        children: [
+          // --------------------------------------------------------
+          // ICON
+          // --------------------------------------------------------
+
+          Container(
+            width: 45,
+            height: 45,
+
+            decoration:
+                BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius:
+                  BorderRadius.circular(14),
+            ),
+
+            child: Icon(
+              isAuto
+                  ? Icons
+                      .electric_rickshaw_rounded
+                  : Icons.local_taxi_rounded,
+              color: Colors.blue,
+              size: 25,
+            ),
+          ),
+
+          const SizedBox(
+            width: 12,
+          ),
+
+          // --------------------------------------------------------
+          // DETAILS
+          // --------------------------------------------------------
+
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$provider $category',
+                  style:
+                      const TextStyle(
+                    fontSize: 15,
+                    fontWeight:
+                        FontWeight.w700,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 5,
+                ),
+
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.schedule_rounded,
+                      size: 14,
+                      color: Colors.grey,
+                    ),
+
+                    const SizedBox(
+                      width: 4,
+                    ),
+
+                    Text(
+                      '$eta min',
+                      style:
+                          const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      width: 10,
+                    ),
+
+                    const Icon(
+                      Icons.auto_awesome_rounded,
+                      size: 14,
+                      color: Colors.blue,
+                    ),
+
+                    const SizedBox(
+                      width: 4,
+                    ),
+
+                    Text(
+                      score,
+                      style:
+                          const TextStyle(
+                        fontSize: 12,
+                        color: Colors.blue,
+                        fontWeight:
+                            FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // --------------------------------------------------------
+          // FARE
+          // --------------------------------------------------------
+
+          Text(
+            '₹$fare',
+            style:
+                const TextStyle(
+              fontSize: 17,
+              fontWeight:
+                  FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // RECOMMENDATION CARD
+  // ============================================================
+
+  Widget _buildRecommendationCard({
+    required String emoji,
+    required String title,
+    required Map<String, dynamic> ride,
+  }) {
+    if (ride.isEmpty) {
+      return Container(
+        margin:
+            const EdgeInsets.only(bottom: 8),
+
         padding:
-            const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          mainAxisAlignment:
-              MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-              ),
-            ),
-            const Text(
-              'N/A',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+            const EdgeInsets.all(14),
+
+        decoration:
+            BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius:
+              BorderRadius.circular(16),
+        ),
+
+        child: Text(
+          '$emoji  $title: N/A',
+          style:
+              const TextStyle(
+            fontSize: 14,
+            fontWeight:
+                FontWeight.w600,
+          ),
         ),
       );
     }
 
-    String provider =
-        recommendation['provider']?.toString() ??
+    final String provider =
+        ride['provider']?.toString() ??
             'N/A';
 
-    String category =
-        recommendation['category']?.toString() ?? '';
+    final String category =
+        ride['category']?.toString() ??
+            '';
 
-    String fare =
-        recommendation['fare']?.toString() ?? 'N/A';
-
-    String score =
-        recommendation['karoScore']?.toString() ??
+    final String fare =
+        ride['fare']?.toString() ??
             'N/A';
 
-    return Padding(
+    final String score =
+        ride['karoScore']?.toString() ??
+            'N/A';
+
+    final String eta =
+        ride['eta']?.toString() ??
+            'N/A';
+
+    return Container(
+      margin:
+          const EdgeInsets.only(bottom: 8),
+
       padding:
-          const EdgeInsets.symmetric(vertical: 5),
+          const EdgeInsets.all(14),
+
+      decoration:
+          BoxDecoration(
+        color: Colors.grey.shade50,
+
+        borderRadius:
+            BorderRadius.circular(16),
+
+        border: Border.all(
+          color: Colors.grey.shade200,
+        ),
+      ),
+
       child: Row(
-        mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
         children: [
+          Text(
+            emoji,
+            style:
+                const TextStyle(
+              fontSize: 21,
+            ),
+          ),
+
+          const SizedBox(
+            width: 10,
+          ),
+
           Expanded(
-            child: Text(
-              '$title - $provider $category',
-              style: const TextStyle(
-                fontSize: 14,
-              ),
-            ),
-          ),
-          Text(
-            '₹$fare | $score/100',
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Price row
-  Widget _buildPriceRow(
-    String title,
-    String price,
-    IconData icon,
-  ) {
-    return Padding(
-      padding:
-          const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment:
-            MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                color: Colors.blue,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style:
+                      const TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey,
+                    fontWeight:
+                        FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+
+                const SizedBox(
+                  height: 3,
+                ),
+
+                Text(
+                  '$provider $category',
+                  style:
+                      const TextStyle(
+                    fontSize: 15,
+                    fontWeight:
+                        FontWeight.w800,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 3,
+                ),
+
+                Text(
+                  '₹$fare  •  ETA $eta min',
+                  style:
+                      const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+              ],
+            ),
           ),
-          Text(
-            '₹$price',
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+
+          const SizedBox(
+            width: 8,
+          ),
+
+          Container(
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 9,
+              vertical: 6,
+            ),
+
+            decoration:
+                BoxDecoration(
+              color: Colors.blue
+                  .withOpacity(0.10),
+              borderRadius:
+                  BorderRadius.circular(10),
+            ),
+
+            child: Text(
+              '$score/100',
+              style:
+                  const TextStyle(
+                color: Colors.blue,
+                fontSize: 12,
+                fontWeight:
+                    FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -888,42 +1709,100 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Action button
+  // ============================================================
+  // ACTION BUTTON
+  // ============================================================
+
   Widget _buildActionButton(
     String text,
     Color color,
     VoidCallback onPressed,
   ) {
-    return ElevatedButton(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        shape: RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(30),
+    final bool isBlack =
+        color == Colors.black;
+
+    return SizedBox(
+      height: 48,
+
+      child: ElevatedButton(
+        style:
+            ElevatedButton.styleFrom(
+          backgroundColor: color,
+
+          foregroundColor: isBlack
+              ? Colors.white
+              : Colors.black,
+
+          elevation: 0,
+
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(15),
+          ),
+        ),
+
+        onPressed: onPressed,
+
+        child: Text(
+          text,
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.w700,
+          ),
         ),
       ),
-      onPressed: onPressed,
-      child: Text(text),
     );
   }
 
-  // Fetch pricing data from KaroCab API
+  // ============================================================
+  // FETCH PRICING DATA
+  // ============================================================
+
   Future<Map<String, dynamic>>
       _fetchPricingData() async {
-    double distance =
-        double.parse(totalDistance.split(' ')[0]);
+    if (totalDistance.isEmpty ||
+        totalDuration.isEmpty) {
+      throw Exception(
+        'Distance and duration are not available.',
+      );
+    }
 
-    int duration =
-        int.parse(totalDuration.split(' ')[0]);
+    final String distanceText =
+        totalDistance.split(' ').first;
 
-    final response = await http.post(
+    final String durationText =
+        totalDuration.split(' ').first;
+
+    final double? distance =
+        double.tryParse(distanceText);
+
+    final int? duration =
+        int.tryParse(durationText);
+
+    if (distance == null ||
+        duration == null) {
+      throw Exception(
+        'Invalid distance or duration.',
+      );
+    }
+
+    // ==========================================================
+    // KAROCAB BACKEND
+    // ==========================================================
+
+    final http.Response response =
+        await http.post(
       Uri.parse(
         'http://10.0.2.2:3000/estimate',
       ),
-      headers: <String, String>{
+
+      headers: const <String, String>{
         'Content-Type':
             'application/json; charset=UTF-8',
       },
+
       body: jsonEncode(
         <String, dynamic>{
           'distance': distance,
@@ -939,21 +1818,28 @@ class HomeScreenState extends State<HomeScreen> {
     );
 
     if (response.statusCode == 200) {
-      print(
-        "KARO API RESPONSE: ${response.body}",
-      );
-
       dev.log(
         'KaroCab API response: ${response.body}',
       );
 
-      return json.decode(response.body);
-    } else {
-      throw Exception(
-        'KaroCab API failed: '
-        '${response.statusCode} '
-        '${response.body}',
+      final dynamic decoded =
+          json.decode(response.body);
+
+      if (decoded is! Map) {
+        throw Exception(
+          'Invalid KaroCab API response.',
+        );
+      }
+
+      return Map<String, dynamic>.from(
+        decoded,
       );
     }
+
+    throw Exception(
+      'KaroCab API failed: '
+      '${response.statusCode} '
+      '${response.body}',
+    );
   }
 }
