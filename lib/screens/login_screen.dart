@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:karocab/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -9,7 +10,181 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
+
   bool isLoading = false;
+  bool otpSent = false;
+  String? verificationId;
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> handleLogin() async {
+    var phone =
+        _phoneController.text.trim().replaceAll(RegExp(r'[\s-]'), '');
+
+    // If user enters a 10-digit Indian number, automatically add +91.
+    if (RegExp(r'^\d{10}$').hasMatch(phone)) {
+      phone = '+91$phone';
+    }
+
+    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phone)) {
+      _showMessage(
+        'Enter a valid phone number, e.g. +919876543210',
+      );
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phone,
+        timeout: const Duration(seconds: 60),
+
+        // Android may automatically verify the SMS.
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          try {
+            await _auth.signInWithCredential(credential);
+
+            if (mounted) {
+              openHomePage();
+            }
+          } catch (e) {
+            if (!mounted) return;
+
+            setState(() {
+              isLoading = false;
+            });
+
+            _showMessage(
+              'Automatic verification failed. Please enter the OTP.',
+            );
+          }
+        },
+
+        // Firebase could not send/verify the OTP.
+        verificationFailed: (FirebaseAuthException e) {
+          if (!mounted) return;
+
+          setState(() {
+            isLoading = false;
+          });
+
+          _showMessage(
+            e.message ?? 'Could not send OTP.',
+          );
+        },
+
+        // OTP successfully sent.
+        codeSent: (String id, int? resendToken) {
+          if (!mounted) return;
+
+          setState(() {
+            verificationId = id;
+            otpSent = true;
+            isLoading = false;
+          });
+
+          _showMessage('OTP sent successfully.');
+        },
+
+        // Auto-retrieval timed out.
+        codeAutoRetrievalTimeout: (String id) {
+          verificationId = id;
+        },
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      _showMessage(
+        'Something went wrong. Please try again.',
+      );
+    }
+  }
+
+  Future<void> verifyOtp() async {
+    final otp = _otpController.text.trim();
+
+    if (verificationId == null) {
+      _showMessage('Please request an OTP first.');
+      return;
+    }
+
+    if (otp.length != 6) {
+      _showMessage('Please enter the 6-digit OTP.');
+      return;
+    }
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId!,
+        smsCode: otp,
+      );
+
+      await _auth.signInWithCredential(credential);
+
+      if (mounted) {
+        openHomePage();
+      }
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      if (e.code == 'invalid-verification-code') {
+        _showMessage('Invalid OTP. Please check and try again.');
+      } else if (e.code == 'session-expired') {
+        _showMessage(
+          'OTP expired. Please request a new OTP.',
+        );
+      } else {
+        _showMessage(
+          e.message ?? 'OTP verification failed.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+      });
+
+      _showMessage(
+        'OTP verification failed. Please try again.',
+      );
+    }
+  }
 
   void openHomePage() {
     if (!mounted) return;
@@ -21,19 +196,6 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       (route) => false,
     );
-  }
-
-  void handleLogin() {
-    setState(() {
-      isLoading = true;
-    });
-
-    // Temporary demo login.
-    // Real Firebase phone authentication will be added later.
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (!mounted) return;
-      openHomePage();
-    });
   }
 
   @override
@@ -184,52 +346,139 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             const SizedBox(height: 24),
 
-                            // Login button
+                            // ------------------------------------------------
+                            // PHONE NUMBER
+                            // ------------------------------------------------
+                            TextField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              enabled: !otpSent && !isLoading,
+                              decoration: InputDecoration(
+                                labelText: 'Mobile Number',
+                                hintText: 'Enter 10-digit mobile number',
+                                prefixIcon: const Icon(
+                                  Icons.phone_rounded,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFE5E7EB),
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFF1463FF),
+                                    width: 2,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            if (otpSent) ...[
+                              const SizedBox(height: 16),
+
+                              // ------------------------------------------------
+                              // OTP
+                              // ------------------------------------------------
+                              TextField(
+                                controller: _otpController,
+                                keyboardType: TextInputType.number,
+                                maxLength: 6,
+                                enabled: !isLoading,
+                                decoration: InputDecoration(
+                                  labelText: 'Enter OTP',
+                                  hintText: '6-digit OTP',
+                                  counterText: '',
+                                  prefixIcon: const Icon(
+                                    Icons.lock_rounded,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF1463FF),
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 18),
+
+                            // ------------------------------------------------
+                            // LOGIN / VERIFY BUTTON
+                            // ------------------------------------------------
                             SizedBox(
                               width: double.infinity,
                               height: 58,
                               child: ElevatedButton(
-                                onPressed: isLoading ? null : handleLogin,
+                                onPressed: isLoading
+                                    ? null
+                                    : (otpSent
+                                        ? verifyOtp
+                                        : handleLogin),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF1463FF),
+                                  backgroundColor:
+                                      const Color(0xFF1463FF),
                                   foregroundColor: Colors.white,
                                   disabledBackgroundColor:
                                       const Color(0xFF8FB4FF),
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(18),
+                                    borderRadius:
+                                        BorderRadius.circular(18),
                                   ),
                                 ),
                                 child: isLoading
                                     ? const SizedBox(
                                         width: 23,
                                         height: 23,
-                                        child: CircularProgressIndicator(
+                                        child:
+                                            CircularProgressIndicator(
                                           strokeWidth: 2.5,
                                           valueColor:
-                                              AlwaysStoppedAnimation<Color>(
+                                              AlwaysStoppedAnimation<
+                                                  Color>(
                                             Colors.white,
                                           ),
                                         ),
                                       )
-                                    : const Row(
+                                    : Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
                                           Icon(
-                                            Icons.phone_rounded,
+                                            otpSent
+                                                ? Icons.verified_rounded
+                                                : Icons.phone_rounded,
                                             size: 21,
                                           ),
-                                          SizedBox(width: 10),
+                                          const SizedBox(width: 10),
                                           Text(
-                                            'Continue with Phone',
-                                            style: TextStyle(
+                                            otpSent
+                                                ? 'Verify OTP'
+                                                : 'Continue with Phone',
+                                            style: const TextStyle(
                                               fontSize: 16,
-                                              fontWeight: FontWeight.w700,
+                                              fontWeight:
+                                                  FontWeight.w700,
                                             ),
                                           ),
-                                          SizedBox(width: 10),
-                                          Icon(
+                                          const SizedBox(width: 10),
+                                          const Icon(
                                             Icons.arrow_forward_rounded,
                                             size: 21,
                                           ),
@@ -237,6 +486,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                               ),
                             ),
+
+                            if (otpSent) ...[
+                              const SizedBox(height: 10),
+
+                              Center(
+                                child: TextButton(
+                                  onPressed: isLoading
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            otpSent = false;
+                                            verificationId = null;
+                                            _otpController.clear();
+                                          });
+                                        },
+                                  child: const Text(
+                                    'Change phone number',
+                                  ),
+                                ),
+                              ),
+                            ],
 
                             const SizedBox(height: 15),
 
@@ -270,16 +540,16 @@ class _LoginScreenState extends State<LoginScreen> {
                       // WHY KAROCAB
                       // ------------------------------------------------
                       const Align(
-  alignment: Alignment.centerLeft,
-  child: Text(
-    'Why KaroCab?',
-    style: TextStyle(
-      fontSize: 18,
-      fontWeight: FontWeight.w700,
-      color: Color(0xFF111827),
-    ),
-  ),
-),
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Why KaroCab?',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                      ),
 
                       const SizedBox(height: 14),
 

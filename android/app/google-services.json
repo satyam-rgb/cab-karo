@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "465936487735",
+    "project_id": "sixth-emissary-477408-e7",
+    "storage_bucket": "sixth-emissary-477408-e7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:465936487735:android:27943b56ff0f28ceabf6b2",
+        "android_client_info": {
+          "package_name": "com.project.karocab"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDS4y80-1MHEsdxeI9JtU19CR6L2UGMMlU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
