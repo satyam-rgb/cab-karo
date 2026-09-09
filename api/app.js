@@ -5,8 +5,12 @@ const app = express();
 app.use(json());
 
 // =========================================================
-// KaroScore helpers
+// Utility helpers
 // =========================================================
+
+function round2(value) {
+    return Number(Number(value).toFixed(2));
+}
 
 // Lower value is better.
 function lowerIsBetterScore(value, min, max) {
@@ -22,14 +26,6 @@ function higherIsBetterScore(value, min, max) {
     return ((value - min) / (max - min)) * 100;
 }
 
-// =========================================================
-// Utility helpers
-// =========================================================
-
-function round2(value) {
-    return Number(Number(value).toFixed(2));
-}
-
 function sortByFare(a, b) {
     return a.fare - b.fare;
 }
@@ -40,6 +36,357 @@ function sortByEta(a, b) {
 
 function sortByKaroScore(a, b) {
     return b.karoScore - a.karoScore;
+}
+
+// =========================================================
+// FARE PREDICTION - ML BASELINE
+// =========================================================
+//
+// This is a lightweight Linear Regression baseline.
+//
+// Training data is intentionally simulated historical data.
+// It is NOT live provider data.
+//
+// Features:
+// 1. Distance in km
+// 2. Hour of day
+// 3. Weekend flag
+// 4. Demand level
+// 5. Previous fare
+//
+// Target:
+// Historical fare
+//
+// This baseline can later be replaced with a larger real
+// historical dataset and Random Forest/XGBoost.
+// =========================================================
+
+const fareTrainingData = [
+    { distance: 2, hour: 8, weekend: 0, demand: 1, previousFare: 70, fare: 72 },
+    { distance: 3, hour: 9, weekend: 0, demand: 1, previousFare: 82, fare: 84 },
+    { distance: 4, hour: 10, weekend: 0, demand: 0, previousFare: 88, fare: 86 },
+    { distance: 5, hour: 11, weekend: 0, demand: 0, previousFare: 98, fare: 100 },
+    { distance: 6, hour: 12, weekend: 0, demand: 1, previousFare: 112, fare: 116 },
+    { distance: 7, hour: 13, weekend: 0, demand: 0, previousFare: 120, fare: 118 },
+    { distance: 8, hour: 14, weekend: 0, demand: 0, previousFare: 132, fare: 130 },
+    { distance: 4, hour: 17, weekend: 0, demand: 2, previousFare: 105, fare: 118 },
+    { distance: 5, hour: 18, weekend: 0, demand: 2, previousFare: 120, fare: 138 },
+    { distance: 6, hour: 19, weekend: 0, demand: 2, previousFare: 135, fare: 155 },
+    { distance: 7, hour: 20, weekend: 0, demand: 2, previousFare: 150, fare: 168 },
+    { distance: 8, hour: 21, weekend: 0, demand: 1, previousFare: 155, fare: 160 },
+    { distance: 3, hour: 22, weekend: 0, demand: 2, previousFare: 100, fare: 122 },
+
+    { distance: 2, hour: 9, weekend: 1, demand: 0, previousFare: 65, fare: 68 },
+    { distance: 4, hour: 10, weekend: 1, demand: 0, previousFare: 90, fare: 92 },
+    { distance: 5, hour: 11, weekend: 1, demand: 1, previousFare: 108, fare: 112 },
+    { distance: 6, hour: 12, weekend: 1, demand: 1, previousFare: 120, fare: 125 },
+    { distance: 7, hour: 13, weekend: 1, demand: 1, previousFare: 135, fare: 140 },
+    { distance: 8, hour: 14, weekend: 1, demand: 1, previousFare: 145, fare: 150 },
+    { distance: 5, hour: 18, weekend: 1, demand: 2, previousFare: 130, fare: 150 },
+    { distance: 6, hour: 19, weekend: 1, demand: 2, previousFare: 145, fare: 165 },
+    { distance: 7, hour: 20, weekend: 1, demand: 2, previousFare: 160, fare: 180 },
+    { distance: 9, hour: 21, weekend: 1, demand: 2, previousFare: 185, fare: 205 },
+
+    { distance: 3, hour: 6, weekend: 0, demand: 0, previousFare: 70, fare: 66 },
+    { distance: 5, hour: 7, weekend: 0, demand: 1, previousFare: 100, fare: 105 },
+    { distance: 6, hour: 8, weekend: 0, demand: 2, previousFare: 120, fare: 135 },
+    { distance: 10, hour: 9, weekend: 0, demand: 1, previousFare: 170, fare: 175 },
+    { distance: 12, hour: 10, weekend: 0, demand: 0, previousFare: 185, fare: 182 },
+    { distance: 10, hour: 17, weekend: 0, demand: 2, previousFare: 190, fare: 220 },
+    { distance: 12, hour: 18, weekend: 0, demand: 2, previousFare: 220, fare: 260 },
+    { distance: 15, hour: 19, weekend: 0, demand: 2, previousFare: 260, fare: 305 },
+    { distance: 14, hour: 20, weekend: 0, demand: 1, previousFare: 250, fare: 265 },
+    { distance: 16, hour: 21, weekend: 0, demand: 1, previousFare: 275, fare: 290 }
+];
+
+function matrixTranspose(matrix) {
+    if (!matrix.length) return [];
+
+    return matrix[0].map((_, columnIndex) =>
+        matrix.map((row) => row[columnIndex])
+    );
+}
+
+function matrixMultiply(a, b) {
+    const result = Array.from(
+        { length: a.length },
+        () => Array(b[0].length).fill(0)
+    );
+
+    for (let i = 0; i < a.length; i++) {
+        for (let j = 0; j < b[0].length; j++) {
+            for (let k = 0; k < b.length; k++) {
+                result[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+
+    return result;
+}
+
+function invertMatrix(matrix) {
+    const n = matrix.length;
+
+    const augmented = matrix.map((row, i) => [
+        ...row,
+        ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))
+    ]);
+
+    for (let column = 0; column < n; column++) {
+        let pivotRow = column;
+
+        for (let row = column + 1; row < n; row++) {
+            if (
+                Math.abs(augmented[row][column]) >
+                Math.abs(augmented[pivotRow][column])
+            ) {
+                pivotRow = row;
+            }
+        }
+
+        if (Math.abs(augmented[pivotRow][column]) < 1e-10) {
+            throw new Error('Matrix cannot be inverted.');
+        }
+
+        [augmented[column], augmented[pivotRow]] =
+            [augmented[pivotRow], augmented[column]];
+
+        const pivot = augmented[column][column];
+
+        for (let j = 0; j < 2 * n; j++) {
+            augmented[column][j] /= pivot;
+        }
+
+        for (let row = 0; row < n; row++) {
+            if (row === column) continue;
+
+            const factor = augmented[row][column];
+
+            for (let j = 0; j < 2 * n; j++) {
+                augmented[row][j] -= factor * augmented[column][j];
+            }
+        }
+    }
+
+    return augmented.map((row) => row.slice(n));
+}
+
+function trainLinearRegression(data) {
+    const X = data.map((item) => [
+        1,
+        item.distance,
+        item.hour,
+        item.weekend,
+        item.demand,
+        item.previousFare
+    ]);
+
+    const y = data.map((item) => [item.fare]);
+
+    const XT = matrixTranspose(X);
+
+    const XTX = matrixMultiply(XT, X);
+
+    // Small ridge value improves numerical stability.
+    const lambda = 0.0001;
+
+    for (let i = 0; i < XTX.length; i++) {
+        XTX[i][i] += lambda;
+    }
+
+    const XTXInverse = invertMatrix(XTX);
+
+    const XTY = matrixMultiply(XT, y);
+
+    const coefficients = matrixMultiply(
+        XTXInverse,
+        XTY
+    );
+
+    return coefficients.map((row) => row[0]);
+}
+
+const fareModelCoefficients =
+    trainLinearRegression(fareTrainingData);
+
+function predictFareWithModel({
+    distance,
+    hour,
+    weekend,
+    demand,
+    previousFare
+}) {
+    const features = [
+        1,
+        distance,
+        hour,
+        weekend,
+        demand,
+        previousFare
+    ];
+
+    let prediction = 0;
+
+    for (let i = 0; i < fareModelCoefficients.length; i++) {
+        prediction +=
+            fareModelCoefficients[i] * features[i];
+    }
+
+    return Math.max(0, prediction);
+}
+
+function calculateRegressionMetrics(data) {
+    const actual = data.map((item) => item.fare);
+
+    const predicted = data.map((item) =>
+        predictFareWithModel({
+            distance: item.distance,
+            hour: item.hour,
+            weekend: item.weekend,
+            demand: item.demand,
+            previousFare: item.previousFare
+        })
+    );
+
+    const errors = actual.map(
+        (value, index) => value - predicted[index]
+    );
+
+    const absoluteErrors =
+        errors.map((error) => Math.abs(error));
+
+    const squaredErrors =
+        errors.map((error) => error * error);
+
+    const mae =
+        absoluteErrors.reduce(
+            (sum, value) => sum + value,
+            0
+        ) / actual.length;
+
+    const rmse =
+        Math.sqrt(
+            squaredErrors.reduce(
+                (sum, value) => sum + value,
+                0
+            ) / actual.length
+        );
+
+    const meanActual =
+        actual.reduce(
+            (sum, value) => sum + value,
+            0
+        ) / actual.length;
+
+    const totalSumSquares =
+        actual.reduce(
+            (sum, value) =>
+                sum + Math.pow(value - meanActual, 2),
+            0
+        );
+
+    const residualSumSquares =
+        squaredErrors.reduce(
+            (sum, value) => sum + value,
+            0
+        );
+
+    const r2 =
+        totalSumSquares === 0
+            ? 0
+            : 1 -
+              residualSumSquares /
+                  totalSumSquares;
+
+    return {
+        mae: round2(mae),
+        rmse: round2(rmse),
+        r2: round2(r2)
+    };
+}
+
+const fareModelMetrics =
+    calculateRegressionMetrics(
+        fareTrainingData
+    );
+
+function normalizeDemand(demand) {
+    if (!demand) return 0;
+
+    const value =
+        demand.toString().trim().toLowerCase();
+
+    if (value === 'high') return 2;
+    if (value === 'medium') return 1;
+
+    return 0;
+}
+
+function getFarePrediction({
+    distance,
+    hour,
+    weekend,
+    demand,
+    previousFare
+}) {
+    const prediction =
+        predictFareWithModel({
+            distance,
+            hour,
+            weekend,
+            demand: normalizeDemand(demand),
+            previousFare
+        });
+
+    const currentFare =
+        Number(previousFare);
+
+    const difference =
+        prediction - currentFare;
+
+    const percentageChange =
+        currentFare > 0
+            ? (difference / currentFare) * 100
+            : 0;
+
+    let trend = 'stable';
+
+    if (percentageChange > 5) {
+        trend = 'up';
+    } else if (percentageChange < -5) {
+        trend = 'down';
+    }
+
+    let recommendation = 'Consider Waiting';
+
+    if (trend === 'up') {
+        recommendation = 'Book Now';
+    } else if (trend === 'stable') {
+        recommendation = 'Either option is reasonable';
+    }
+
+    return {
+        predictedFare: round2(prediction),
+
+        currentFare: round2(currentFare),
+
+        expectedChange:
+            round2(difference),
+
+        expectedChangePercent:
+            round2(percentageChange),
+
+        trend,
+
+        recommendation,
+
+        model: 'Linear Regression',
+
+        dataType:
+            'Simulated historical training data',
+
+        metrics: fareModelMetrics
+    };
 }
 
 // =========================================================
@@ -170,7 +517,9 @@ const pricingModels = {
 function calculateKaroScore(rides) {
     const fares = rides.map((ride) => ride.fare);
     const etas = rides.map((ride) => ride.eta);
-    const durations = rides.map((ride) => ride.duration);
+    const durations = rides.map(
+        (ride) => ride.duration
+    );
 
     const minFare = Math.min(...fares);
     const maxFare = Math.max(...fares);
@@ -178,35 +527,43 @@ function calculateKaroScore(rides) {
     const minEta = Math.min(...etas);
     const maxEta = Math.max(...etas);
 
-    const minDuration = Math.min(...durations);
-    const maxDuration = Math.max(...durations);
+    const minDuration =
+        Math.min(...durations);
+
+    const maxDuration =
+        Math.max(...durations);
 
     return rides.map((ride) => {
-        // Lower is better
-        const priceScore = lowerIsBetterScore(
-            ride.fare,
-            minFare,
-            maxFare
-        );
+        const priceScore =
+            lowerIsBetterScore(
+                ride.fare,
+                minFare,
+                maxFare
+            );
 
-        const etaScore = lowerIsBetterScore(
-            ride.eta,
-            minEta,
-            maxEta
-        );
+        const etaScore =
+            lowerIsBetterScore(
+                ride.eta,
+                minEta,
+                maxEta
+            );
 
-        const durationScore = lowerIsBetterScore(
-            ride.duration,
-            minDuration,
-            maxDuration
-        );
+        const durationScore =
+            lowerIsBetterScore(
+                ride.duration,
+                minDuration,
+                maxDuration
+            );
 
-        // Higher is better
-        const comfortScore = ride.comfort;
-        const reliabilityScore = ride.reliability;
-        const safetyScore = ride.safety;
+        const comfortScore =
+            ride.comfort;
 
-        // KaroScore weights
+        const reliabilityScore =
+            ride.reliability;
+
+        const safetyScore =
+            ride.safety;
+
         const karoScore =
             priceScore * 0.35 +
             etaScore * 0.20 +
@@ -223,7 +580,8 @@ function calculateKaroScore(rides) {
                 eta: round2(etaScore),
                 duration: round2(durationScore),
                 comfort: round2(comfortScore),
-                reliability: round2(reliabilityScore),
+                reliability:
+                    round2(reliabilityScore),
                 safety: round2(safetyScore)
             },
 
@@ -272,19 +630,24 @@ function generateScoreExplanation(ride) {
         }
     ];
 
-    const contributions = factors.map((factor) => ({
-        name: factor.name,
-        score: factor.score,
-        weight: factor.weight,
-        contribution:
-            factor.score * (factor.weight / 100)
-    }));
+    const contributions =
+        factors.map((factor) => ({
+            name: factor.name,
+            score: factor.score,
+            weight: factor.weight,
+            contribution:
+                factor.score *
+                (factor.weight / 100)
+        }));
 
     contributions.sort(
-        (a, b) => b.contribution - a.contribution
+        (a, b) =>
+            b.contribution -
+            a.contribution
     );
 
-    const strongestFactor = contributions[0];
+    const strongestFactor =
+        contributions[0];
 
     let summary;
 
@@ -313,42 +676,56 @@ function generateScoreExplanation(ride) {
                 score: scores.price,
                 weight: 35,
                 contribution:
-                    round2(scores.price * 0.35)
+                    round2(
+                        scores.price * 0.35
+                    )
             },
 
             eta: {
                 score: scores.eta,
                 weight: 20,
                 contribution:
-                    round2(scores.eta * 0.20)
+                    round2(
+                        scores.eta * 0.20
+                    )
             },
 
             duration: {
                 score: scores.duration,
                 weight: 15,
                 contribution:
-                    round2(scores.duration * 0.15)
+                    round2(
+                        scores.duration * 0.15
+                    )
             },
 
             comfort: {
                 score: scores.comfort,
                 weight: 10,
                 contribution:
-                    round2(scores.comfort * 0.10)
+                    round2(
+                        scores.comfort * 0.10
+                    )
             },
 
             reliability: {
-                score: scores.reliability,
+                score:
+                    scores.reliability,
                 weight: 10,
                 contribution:
-                    round2(scores.reliability * 0.10)
+                    round2(
+                        scores.reliability *
+                        0.10
+                    )
             },
 
             safety: {
                 score: scores.safety,
                 weight: 10,
                 contribution:
-                    round2(scores.safety * 0.10)
+                    round2(
+                        scores.safety * 0.10
+                    )
             }
         }
     };
@@ -369,41 +746,25 @@ function calculateSmartRecommendations(rides) {
         };
     }
 
-    // ---------------------------------------------------------
-    // 1. Best Overall
-    // Highest KaroScore
-    // ---------------------------------------------------------
-
     const bestOverall =
-        [...rides].sort(sortByKaroScore)[0];
-
-    // ---------------------------------------------------------
-    // 2. Best Budget
-    // Lowest fare
-    // ---------------------------------------------------------
+        [...rides].sort(
+            sortByKaroScore
+        )[0];
 
     const bestBudget =
-        [...rides].sort(sortByFare)[0];
-
-    // ---------------------------------------------------------
-    // 3. Fastest
-    // Lowest ETA
-    // ---------------------------------------------------------
+        [...rides].sort(
+            sortByFare
+        )[0];
 
     const fastest =
-        [...rides].sort(sortByEta)[0];
-
-    // ---------------------------------------------------------
-    // 4. Budget + Not Slowest
-    //
-    // First identify slowest ride.
-    // Remove slowest.
-    // Then choose cheapest remaining ride.
-    // ---------------------------------------------------------
+        [...rides].sort(
+            sortByEta
+        )[0];
 
     const slowest =
         [...rides].sort(
-            (a, b) => b.eta - a.eta
+            (a, b) =>
+                b.eta - a.eta
         )[0];
 
     let budgetButNotSlowest;
@@ -411,84 +772,88 @@ function calculateSmartRecommendations(rides) {
     if (rides.length > 1) {
         const alternatives =
             rides.filter(
-                (ride) => ride.id !== slowest.id
+                (ride) =>
+                    ride.id !== slowest.id
             );
 
         budgetButNotSlowest =
-            [...alternatives].sort(sortByFare)[0];
+            [...alternatives].sort(
+                sortByFare
+            )[0];
     } else {
-        budgetButNotSlowest = rides[0];
+        budgetButNotSlowest =
+            rides[0];
     }
 
-    // ---------------------------------------------------------
-    // 5. Balanced Choice
-    //
-    // Uses:
-    // Price = 40%
-    // Speed = 30%
-    // KaroScore = 30%
-    //
-    // This is separate from the base KaroScore so that
-    // recommendation logic can explain its own trade-off.
-    // ---------------------------------------------------------
+    const fares =
+        rides.map(
+            (ride) => ride.fare
+        );
 
-    const fares = rides.map(
-        (ride) => ride.fare
-    );
+    const etas =
+        rides.map(
+            (ride) => ride.eta
+        );
 
-    const etas = rides.map(
-        (ride) => ride.eta
-    );
+    const minFare =
+        Math.min(...fares);
 
-    const minFare = Math.min(...fares);
-    const maxFare = Math.max(...fares);
+    const maxFare =
+        Math.max(...fares);
 
-    const minEta = Math.min(...etas);
-    const maxEta = Math.max(...etas);
+    const minEta =
+        Math.min(...etas);
 
-    const balancedRides = rides.map((ride) => {
-        const priceScore =
-            lowerIsBetterScore(
-                ride.fare,
-                minFare,
-                maxFare
-            );
+    const maxEta =
+        Math.max(...etas);
 
-        const speedScore =
-            lowerIsBetterScore(
-                ride.eta,
-                minEta,
-                maxEta
-            );
+    const balancedRides =
+        rides.map((ride) => {
+            const priceScore =
+                lowerIsBetterScore(
+                    ride.fare,
+                    minFare,
+                    maxFare
+                );
 
-        const balancedScore =
-            priceScore * 0.40 +
-            speedScore * 0.30 +
-            ride.karoScore * 0.30;
+            const speedScore =
+                lowerIsBetterScore(
+                    ride.eta,
+                    minEta,
+                    maxEta
+                );
 
-        return {
-            ...ride,
+            const balancedScore =
+                priceScore * 0.40 +
+                speedScore * 0.30 +
+                ride.karoScore * 0.30;
 
-            recommendationScores: {
-                priceScore: round2(priceScore),
-                speedScore: round2(speedScore),
-                balancedScore: round2(
-                    balancedScore
-                )
-            }
-        };
-    });
+            return {
+                ...ride,
+
+                recommendationScores: {
+                    priceScore:
+                        round2(priceScore),
+
+                    speedScore:
+                        round2(speedScore),
+
+                    balancedScore:
+                        round2(
+                            balancedScore
+                        )
+                }
+            };
+        });
 
     const balanced =
         [...balancedRides].sort(
             (a, b) =>
-                b.recommendationScores.balancedScore -
-                a.recommendationScores.balancedScore
+                b.recommendationScores
+                    .balancedScore -
+                a.recommendationScores
+                    .balancedScore
         )[0];
-
-    // ---------------------------------------------------------
-    // Trade-off calculations
-    // ---------------------------------------------------------
 
     const budgetFare =
         bestBudget.fare;
@@ -510,12 +875,9 @@ function calculateSmartRecommendations(rides) {
         slowestEta -
         budgetNotSlowestEta;
 
-    // ---------------------------------------------------------
-    // Explanations
-    // ---------------------------------------------------------
-
     const budgetButNotSlowestExplanation =
-        budgetButNotSlowest.id === bestBudget.id
+        budgetButNotSlowest.id ===
+        bestBudget.id
             ? `${budgetButNotSlowest.provider} ${budgetButNotSlowest.category} is both the cheapest option and not the slowest ride.`
             : `${budgetButNotSlowest.provider} ${budgetButNotSlowest.category} is recommended for users who want to save money without choosing the slowest ride. The slowest option is ${slowest.provider} ${slowest.category} at ${slowest.eta} minutes.`;
 
@@ -594,11 +956,15 @@ function getPreferenceRecommendation(
     }
 
     if (
-        normalizedPreference === 'budget_not_slowest' ||
-        normalizedPreference === 'budget-but-not-slowest' ||
-        normalizedPreference === 'cheap_but_fast'
+        normalizedPreference ===
+            'budget_not_slowest' ||
+        normalizedPreference ===
+            'budget-but-not-slowest' ||
+        normalizedPreference ===
+            'cheap_but_fast'
     ) {
-        return smartRecommendations.budgetButNotSlowest;
+        return smartRecommendations
+            .budgetButNotSlowest;
     }
 
     if (
@@ -620,6 +986,84 @@ app.get('/', (req, res) => {
 });
 
 // =========================================================
+// ML FARE PREDICTION API
+// =========================================================
+
+app.post('/predict-fare', (req, res) => {
+    const {
+        distance,
+        hour,
+        weekend,
+        demand,
+        previousFare
+    } = req.body;
+
+    if (
+        distance === undefined ||
+        hour === undefined ||
+        weekend === undefined ||
+        !demand ||
+        previousFare === undefined
+    ) {
+        return res.status(400).json({
+            error:
+                'Please provide distance, hour, weekend, demand and previousFare.'
+        });
+    }
+
+    if (
+        typeof distance !== 'number' ||
+        typeof hour !== 'number' ||
+        typeof previousFare !== 'number'
+    ) {
+        return res.status(400).json({
+            error:
+                'distance, hour and previousFare must be numbers.'
+        });
+    }
+
+    if (distance <= 0) {
+        return res.status(400).json({
+            error:
+                'Distance must be greater than 0.'
+        });
+    }
+
+    if (hour < 0 || hour > 23) {
+        return res.status(400).json({
+            error:
+                'Hour must be between 0 and 23.'
+        });
+    }
+
+    if (previousFare <= 0) {
+        return res.status(400).json({
+            error:
+                'previousFare must be greater than 0.'
+        });
+    }
+
+    const prediction =
+        getFarePrediction({
+            distance,
+            hour,
+            weekend:
+                weekend ? 1 : 0,
+            demand,
+            previousFare
+        });
+
+    return res.json({
+        success: true,
+
+        prediction,
+
+        note:
+            'Prediction is model-based and trained on simulated historical data. It is not a live provider fare.'
+    });
+});
+
+// =========================================================
 // ESTIMATE API
 // =========================================================
 
@@ -635,8 +1079,12 @@ app.post('/estimate', (req, res) => {
         historicData,
 
         // Optional preference.
-        // Existing app does not need to send this.
-        preference
+        preference,
+
+        // Optional ML inputs.
+        hour,
+        weekend,
+        previousFare
     } = req.body;
 
     // ---------------------------------------------------------
@@ -687,65 +1135,69 @@ app.post('/estimate', (req, res) => {
     // Calculate fares
     // ---------------------------------------------------------
 
-    const uberCabFare = calculateFare(
-        pricingModels.uberCab.baseFare,
-        pricingModels.uberCab.costPerKm,
-        distance,
-        pricingModels.uberCab.costPerMinute,
-        timeTaken,
-        pricingModels.uberCab.surgeMultiplier,
-        traffic,
-        demand,
-        tolls,
-        timeOfDay,
-        route,
-        historicData
-    );
+    const uberCabFare =
+        calculateFare(
+            pricingModels.uberCab.baseFare,
+            pricingModels.uberCab.costPerKm,
+            distance,
+            pricingModels.uberCab.costPerMinute,
+            timeTaken,
+            pricingModels.uberCab.surgeMultiplier,
+            traffic,
+            demand,
+            tolls,
+            timeOfDay,
+            route,
+            historicData
+        );
 
-    const uberAutoFare = calculateFare(
-        pricingModels.uberAuto.baseFare,
-        pricingModels.uberAuto.costPerKm,
-        distance,
-        pricingModels.uberAuto.costPerMinute,
-        timeTaken,
-        pricingModels.uberAuto.surgeMultiplier,
-        traffic,
-        demand,
-        tolls,
-        timeOfDay,
-        route,
-        historicData
-    );
+    const uberAutoFare =
+        calculateFare(
+            pricingModels.uberAuto.baseFare,
+            pricingModels.uberAuto.costPerKm,
+            distance,
+            pricingModels.uberAuto.costPerMinute,
+            timeTaken,
+            pricingModels.uberAuto.surgeMultiplier,
+            traffic,
+            demand,
+            tolls,
+            timeOfDay,
+            route,
+            historicData
+        );
 
-    const olaCabFare = calculateFare(
-        pricingModels.olaCab.baseFare,
-        pricingModels.olaCab.costPerKm,
-        distance,
-        pricingModels.olaCab.costPerMinute,
-        timeTaken,
-        pricingModels.olaCab.surgeMultiplier,
-        traffic,
-        demand,
-        tolls,
-        timeOfDay,
-        route,
-        historicData
-    );
+    const olaCabFare =
+        calculateFare(
+            pricingModels.olaCab.baseFare,
+            pricingModels.olaCab.costPerKm,
+            distance,
+            pricingModels.olaCab.costPerMinute,
+            timeTaken,
+            pricingModels.olaCab.surgeMultiplier,
+            traffic,
+            demand,
+            tolls,
+            timeOfDay,
+            route,
+            historicData
+        );
 
-    const olaAutoFare = calculateFare(
-        pricingModels.olaAuto.baseFare,
-        pricingModels.olaAuto.costPerKm,
-        distance,
-        pricingModels.olaAuto.costPerMinute,
-        timeTaken,
-        pricingModels.olaAuto.surgeMultiplier,
-        traffic,
-        demand,
-        tolls,
-        timeOfDay,
-        route,
-        historicData
-    );
+    const olaAutoFare =
+        calculateFare(
+            pricingModels.olaAuto.baseFare,
+            pricingModels.olaAuto.costPerKm,
+            distance,
+            pricingModels.olaAuto.costPerMinute,
+            timeTaken,
+            pricingModels.olaAuto.surgeMultiplier,
+            traffic,
+            demand,
+            tolls,
+            timeOfDay,
+            route,
+            historicData
+        );
 
     // ---------------------------------------------------------
     // Build ride list
@@ -754,8 +1206,10 @@ app.post('/estimate', (req, res) => {
     const rides = [
         {
             id: 'uberCab',
+
             provider:
                 pricingModels.uberCab.provider,
+
             category:
                 pricingModels.uberCab.category,
 
@@ -765,7 +1219,8 @@ app.post('/estimate', (req, res) => {
             // These are not live provider ETAs.
             eta: 5,
 
-            duration: Number(timeTaken),
+            duration:
+                Number(timeTaken),
 
             comfort:
                 pricingModels.uberCab.comfort,
@@ -779,8 +1234,10 @@ app.post('/estimate', (req, res) => {
 
         {
             id: 'uberAuto',
+
             provider:
                 pricingModels.uberAuto.provider,
+
             category:
                 pricingModels.uberAuto.category,
 
@@ -788,7 +1245,8 @@ app.post('/estimate', (req, res) => {
 
             eta: 6,
 
-            duration: Number(timeTaken),
+            duration:
+                Number(timeTaken),
 
             comfort:
                 pricingModels.uberAuto.comfort,
@@ -802,8 +1260,10 @@ app.post('/estimate', (req, res) => {
 
         {
             id: 'olaCab',
+
             provider:
                 pricingModels.olaCab.provider,
+
             category:
                 pricingModels.olaCab.category,
 
@@ -811,7 +1271,8 @@ app.post('/estimate', (req, res) => {
 
             eta: 7,
 
-            duration: Number(timeTaken),
+            duration:
+                Number(timeTaken),
 
             comfort:
                 pricingModels.olaCab.comfort,
@@ -825,8 +1286,10 @@ app.post('/estimate', (req, res) => {
 
         {
             id: 'olaAuto',
+
             provider:
                 pricingModels.olaAuto.provider,
+
             category:
                 pricingModels.olaAuto.category,
 
@@ -834,7 +1297,8 @@ app.post('/estimate', (req, res) => {
 
             eta: 8,
 
-            duration: Number(timeTaken),
+            duration:
+                Number(timeTaken),
 
             comfort:
                 pricingModels.olaAuto.comfort,
@@ -859,16 +1323,14 @@ app.post('/estimate', (req, res) => {
     // ---------------------------------------------------------
 
     const explainedRides =
-        scoredRides.map((ride) => {
-            return {
-                ...ride,
+        scoredRides.map((ride) => ({
+            ...ride,
 
-                explanation:
-                    generateScoreExplanation(
-                        ride
-                    )
-            };
-        });
+            explanation:
+                generateScoreExplanation(
+                    ride
+                )
+        }));
 
     // ---------------------------------------------------------
     // Smart Recommendations
@@ -890,43 +1352,88 @@ app.post('/estimate', (req, res) => {
         );
 
     // ---------------------------------------------------------
+    // ML Fare Prediction
+    // ---------------------------------------------------------
+
+    const currentHour =
+        typeof hour === 'number'
+            ? hour
+            : new Date().getHours();
+
+    const currentWeekend =
+        typeof weekend === 'boolean'
+            ? weekend
+            : false;
+
+    const cheapestFare =
+        smartRecommendations
+            .bestBudget
+            .fare;
+
+    const mlPreviousFare =
+        typeof previousFare === 'number'
+            ? previousFare
+            : cheapestFare;
+
+    const farePrediction =
+        getFarePrediction({
+            distance,
+            hour: currentHour,
+            weekend:
+                currentWeekend ? 1 : 0,
+            demand,
+            previousFare:
+                mlPreviousFare
+        });
+
+    // ---------------------------------------------------------
     // Response
     // ---------------------------------------------------------
 
     return res.json({
-        distance: round2(distance),
+        distance:
+            round2(distance),
 
-        duration: Number(timeTaken),
+        duration:
+            Number(timeTaken),
 
         // -----------------------------------------------------
         // Ride data
         // -----------------------------------------------------
 
-        rides: explainedRides.map((ride) => ({
-            id: ride.id,
+        rides:
+            explainedRides.map(
+                (ride) => ({
+                    id: ride.id,
 
-            provider: ride.provider,
+                    provider:
+                        ride.provider,
 
-            category: ride.category,
+                    category:
+                        ride.category,
 
-            fare: round2(ride.fare),
+                    fare:
+                        round2(ride.fare),
 
-            eta: ride.eta,
+                    eta:
+                        ride.eta,
 
-            duration: ride.duration,
+                    duration:
+                        ride.duration,
 
-            karoScore: ride.karoScore,
+                    karoScore:
+                        ride.karoScore,
 
-            scores: ride.scores,
+                    scores:
+                        ride.scores,
 
-            explanation:
-                ride.explanation
-        })),
+                    explanation:
+                        ride.explanation
+                })
+            ),
 
         // -----------------------------------------------------
         // Existing recommendations
-        //
-        // Kept exactly compatible with current Flutter UI.
         // -----------------------------------------------------
 
         recommendations: {
@@ -943,7 +1450,7 @@ app.post('/estimate', (req, res) => {
                     .fastest.id,
 
             // -------------------------------------------------
-            // New intelligent recommendations
+            // Intelligent recommendations
             // -------------------------------------------------
 
             budgetButNotSlowest:
@@ -954,29 +1461,25 @@ app.post('/estimate', (req, res) => {
                 smartRecommendations
                     .balanced.id,
 
-            // -------------------------------------------------
-            // Preference-based recommendation
-            // -------------------------------------------------
-
             preference:
                 preferenceRide
                     ? preferenceRide.id
                     : null,
 
-            // -------------------------------------------------
-            // Explanations
-            // -------------------------------------------------
-
             explanations:
-                smartRecommendations.explanations,
-
-            // -------------------------------------------------
-            // Trade-off information
-            // -------------------------------------------------
+                smartRecommendations
+                    .explanations,
 
             tradeoffs:
-                smartRecommendations.tradeoffs
+                smartRecommendations
+                    .tradeoffs
         },
+
+        // -----------------------------------------------------
+        // FARE PREDICTION
+        // -----------------------------------------------------
+
+        farePrediction,
 
         // -----------------------------------------------------
         // Metadata
@@ -991,6 +1494,31 @@ app.post('/estimate', (req, res) => {
 
             note:
                 'Recommendations are calculated from KaroCab estimated/simulated comparison data.'
+        },
+
+        predictionModel: {
+            algorithm:
+                'Linear Regression',
+
+            features: [
+                'distance',
+                'hour',
+                'weekend',
+                'demand',
+                'previousFare'
+            ],
+
+            target:
+                'historical fare',
+
+            trainingData:
+                'simulated historical data',
+
+            metrics:
+                fareModelMetrics,
+
+            note:
+                'Fare prediction is model-based and should not be presented as a live provider quote.'
         }
     });
 });
@@ -1005,5 +1533,13 @@ const PORT =
 app.listen(PORT, () => {
     console.log(
         `KaroCab API running on port ${PORT}`
+    );
+
+    console.log(
+        'Fare Prediction ML model: Linear Regression'
+    );
+
+    console.log(
+        `ML metrics: MAE=${fareModelMetrics.mae}, RMSE=${fareModelMetrics.rmse}, R2=${fareModelMetrics.r2}`
     );
 });

@@ -31,8 +31,7 @@ class HomeScreenState extends State<HomeScreen> {
   // DEFAULT CAMERA POSITION
   // ============================================================
 
-  static const CameraPosition _defaultCameraPosition =
-      CameraPosition(
+  static const CameraPosition _defaultCameraPosition = CameraPosition(
     target: LatLng(21.1458, 79.0882),
     zoom: 11.5,
     tilt: 60.0,
@@ -71,11 +70,9 @@ class HomeScreenState extends State<HomeScreen> {
   // TEXT CONTROLLERS
   // ============================================================
 
-  final TextEditingController fromController =
-      TextEditingController();
+  final TextEditingController fromController = TextEditingController();
 
-  final TextEditingController toController =
-      TextEditingController();
+  final TextEditingController toController = TextEditingController();
 
   // ============================================================
   // DISTANCE / DURATION
@@ -135,6 +132,20 @@ class HomeScreenState extends State<HomeScreen> {
           },
         ),
 
+        // ======================================================
+        // PROFILE BUTTON
+        // ======================================================
+
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_rounded),
+            tooltip: 'My Profile',
+            onPressed: () {
+              Navigator.pushNamed(context, '/profileScreen');
+            },
+          ),
+        ],
+
         centerTitle: true,
 
         title: const Text(
@@ -178,19 +189,14 @@ class HomeScreenState extends State<HomeScreen> {
                     ),
                   );
                 },
-
                 initialCameraPosition:
-                    _initialCameraPosition ??
-                        _defaultCameraPosition,
-
+                    _initialCameraPosition ?? _defaultCameraPosition,
                 markers: Set<Marker>.of(
                   markers.values,
                 ),
-
                 polylines: Set<Polyline>.of(
                   polylines.values,
                 ),
-
                 myLocationEnabled: true,
                 myLocationButtonEnabled: true,
                 zoomControlsEnabled: false,
@@ -212,8 +218,7 @@ class HomeScreenState extends State<HomeScreen> {
           // ======================================================
 
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10.0),
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
             child: TextField(
               controller: fromController,
               decoration: InputDecoration(
@@ -224,25 +229,19 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
                 filled: true,
                 fillColor: Colors.grey[200],
-
                 border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(10.0),
                   borderSide: BorderSide.none,
                 ),
-
                 enabledBorder: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: AppPallete.buttonGradient1,
                     width: 1.0,
                   ),
                 ),
-
                 focusedBorder: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: Colors.blue,
                     width: 2.0,
@@ -261,8 +260,7 @@ class HomeScreenState extends State<HomeScreen> {
           // ======================================================
 
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10.0),
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
             child: TextField(
               controller: toController,
               decoration: InputDecoration(
@@ -273,25 +271,19 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
                 filled: true,
                 fillColor: Colors.grey[200],
-
                 border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(10.0),
                   borderSide: BorderSide.none,
                 ),
-
                 enabledBorder: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: AppPallete.buttonGradient1,
                     width: 1.0,
                   ),
                 ),
-
                 focusedBorder: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(10.0),
                   borderSide: const BorderSide(
                     color: Colors.blue,
                     width: 2.0,
@@ -310,12 +302,10 @@ class HomeScreenState extends State<HomeScreen> {
           // ======================================================
 
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10.0),
+            padding: const EdgeInsets.symmetric(horizontal: 10.0),
             child: CustomButton.buildCustomButton(
               context: context,
               isArrowVisible: false,
-
               onPressed: () async {
                 if (fromController.text.trim().isEmpty ||
                     toController.text.trim().isEmpty) {
@@ -353,7 +343,6 @@ class HomeScreenState extends State<HomeScreen> {
                   );
                 }
               },
-
               text: 'Submit',
             ),
           ),
@@ -362,8 +351,7 @@ class HomeScreenState extends State<HomeScreen> {
           // DISTANCE / DURATION
           // ======================================================
 
-          if (totalDistance.isNotEmpty &&
-              totalDuration.isNotEmpty)
+          if (totalDistance.isNotEmpty && totalDuration.isNotEmpty)
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Text(
@@ -394,8 +382,7 @@ class HomeScreenState extends State<HomeScreen> {
           await Geolocator.checkPermission();
 
       if (permission == LocationPermission.denied) {
-        permission =
-            await Geolocator.requestPermission();
+        permission = await Geolocator.requestPermission();
       }
 
       if (permission == LocationPermission.denied) {
@@ -403,8 +390,7 @@ class HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      if (permission ==
-          LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever) {
         dev.log(
           'Location permissions are permanently denied.',
         );
@@ -424,8 +410,7 @@ class HomeScreenState extends State<HomeScreen> {
         latitude = position.latitude;
         longitude = position.longitude;
 
-        _initialCameraPosition =
-            CameraPosition(
+        _initialCameraPosition = CameraPosition(
           target: LatLng(
             latitude!,
             longitude!,
@@ -458,8 +443,7 @@ class HomeScreenState extends State<HomeScreen> {
     String id,
     BitmapDescriptor descriptor,
   ) {
-    final MarkerId markerId =
-        MarkerId(id);
+    final MarkerId markerId = MarkerId(id);
 
     final Marker marker = Marker(
       markerId: markerId,
@@ -480,11 +464,9 @@ class HomeScreenState extends State<HomeScreen> {
 
   Future<void> _setOriginAndDestination() async {
     try {
-      final String from =
-          fromController.text.trim();
+      final String from = fromController.text.trim();
 
-      final String to =
-          toController.text.trim();
+      final String to = toController.text.trim();
 
       final List<Location> originLocations =
           await locationFromAddress(from);
@@ -532,28 +514,20 @@ class HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-      final LatLngBounds bounds =
-          LatLngBounds(
+      final LatLngBounds bounds = LatLngBounds(
         southwest: LatLng(
-          originLatLng.latitude <
-                  destinationLatLng.latitude
+          originLatLng.latitude < destinationLatLng.latitude
               ? originLatLng.latitude
               : destinationLatLng.latitude,
-
-          originLatLng.longitude <
-                  destinationLatLng.longitude
+          originLatLng.longitude < destinationLatLng.longitude
               ? originLatLng.longitude
               : destinationLatLng.longitude,
         ),
-
         northeast: LatLng(
-          originLatLng.latitude >
-                  destinationLatLng.latitude
+          originLatLng.latitude > destinationLatLng.latitude
               ? originLatLng.latitude
               : destinationLatLng.latitude,
-
-          originLatLng.longitude >
-                  destinationLatLng.longitude
+          originLatLng.longitude > destinationLatLng.longitude
               ? originLatLng.longitude
               : destinationLatLng.longitude,
         ),
@@ -602,11 +576,9 @@ class HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final LatLng origin =
-        originMarker.position;
+    final LatLng origin = originMarker.position;
 
-    final LatLng destination =
-        destinationMarker.position;
+    final LatLng destination = destinationMarker.position;
 
     final String url =
         'https://router.project-osrm.org/route/v1/driving/'
@@ -614,8 +586,7 @@ class HomeScreenState extends State<HomeScreen> {
         '${destination.longitude},${destination.latitude}'
         '?overview=full&geometries=polyline';
 
-    final http.Response response =
-        await http.get(
+    final http.Response response = await http.get(
       Uri.parse(url),
     );
 
@@ -626,8 +597,7 @@ class HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final dynamic decoded =
-        json.decode(response.body);
+    final dynamic decoded = json.decode(response.body);
 
     final List<dynamic> routes =
         decoded['routes'] as List<dynamic>;
@@ -652,18 +622,15 @@ class HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    polylineCoordinates =
-        _decodePolyline(
+    polylineCoordinates = _decodePolyline(
       encodedPolyline,
     );
 
     final double distanceKm =
-        (route['distance'] as num).toDouble() /
-            1000;
+        (route['distance'] as num).toDouble() / 1000;
 
     final double durationMinutes =
-        (route['duration'] as num).toDouble() /
-            60;
+        (route['duration'] as num).toDouble() / 60;
 
     totalDistance =
         '${distanceKm.toStringAsFixed(2)} km';
@@ -699,11 +666,9 @@ class HomeScreenState extends State<HomeScreen> {
       int result = 0;
 
       do {
-        b =
-            encoded.codeUnitAt(index++) - 63;
+        b = encoded.codeUnitAt(index++) - 63;
 
-        result |=
-            (b & 0x1f) << shift;
+        result |= (b & 0x1f) << shift;
 
         shift += 5;
       } while (b >= 0x20);
@@ -719,11 +684,9 @@ class HomeScreenState extends State<HomeScreen> {
       result = 0;
 
       do {
-        b =
-            encoded.codeUnitAt(index++) - 63;
+        b = encoded.codeUnitAt(index++) - 63;
 
-        result |=
-            (b & 0x1f) << shift;
+        result |= (b & 0x1f) << shift;
 
         shift += 5;
       } while (b >= 0x20);
@@ -735,11 +698,9 @@ class HomeScreenState extends State<HomeScreen> {
 
       lng += dlng;
 
-      final double decodedLatitude =
-          lat / 1E5;
+      final double decodedLatitude = lat / 1E5;
 
-      final double decodedLongitude =
-          lng / 1E5;
+      final double decodedLongitude = lng / 1E5;
 
       poly.add(
         LatLng(
@@ -822,8 +783,7 @@ class HomeScreenState extends State<HomeScreen> {
       }
 
       final Map<String, dynamic> recommendations =
-          pricingData['recommendations']
-                  is Map
+          pricingData['recommendations'] is Map
               ? Map<String, dynamic>.from(
                   pricingData['recommendations'],
                 )
@@ -831,20 +791,17 @@ class HomeScreenState extends State<HomeScreen> {
 
       final Map<String, dynamic> bestOverall =
           getRide(
-        recommendations['bestOverall']
-            ?.toString(),
+        recommendations['bestOverall']?.toString(),
       );
 
       final Map<String, dynamic> bestBudget =
           getRide(
-        recommendations['bestBudget']
-            ?.toString(),
+        recommendations['bestBudget']?.toString(),
       );
 
       final Map<String, dynamic> fastest =
           getRide(
-        recommendations['fastest']
-            ?.toString(),
+        recommendations['fastest']?.toString(),
       );
 
       if (!mounted) return;
@@ -858,27 +815,19 @@ class HomeScreenState extends State<HomeScreen> {
         builder: (BuildContext dialogContext) {
           return Dialog(
             backgroundColor: Colors.transparent,
-
-            insetPadding:
-                const EdgeInsets.symmetric(
+            insetPadding: const EdgeInsets.symmetric(
               horizontal: 18,
               vertical: 24,
             ),
-
             child: Container(
               constraints: BoxConstraints(
                 maxHeight:
-                    MediaQuery.of(dialogContext)
-                            .size
-                            .height *
+                    MediaQuery.of(dialogContext).size.height *
                         0.88,
               ),
-
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(28),
-
+                borderRadius: BorderRadius.circular(28),
                 boxShadow: const [
                   BoxShadow(
                     color: Colors.black26,
@@ -887,20 +836,16 @@ class HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-
               child: SingleChildScrollView(
-                padding:
-                    const EdgeInsets.fromLTRB(
+                padding: const EdgeInsets.fromLTRB(
                   20,
                   20,
                   20,
                   18,
                 ),
-
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
-
                   children: [
                     // ==================================================
                     // HEADER
@@ -911,41 +856,30 @@ class HomeScreenState extends State<HomeScreen> {
                         Container(
                           width: 48,
                           height: 48,
-
-                          decoration:
-                              BoxDecoration(
-                            color: Colors.blue
-                                .withOpacity(0.10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.10),
                             borderRadius:
-                                BorderRadius.circular(
-                              15,
-                            ),
+                                BorderRadius.circular(15),
                           ),
-
                           child: const Icon(
-                            Icons
-                                .local_taxi_rounded,
+                            Icons.local_taxi_rounded,
                             color: Colors.blue,
                             size: 27,
                           ),
                         ),
-
                         const SizedBox(
                           width: 12,
                         ),
-
                         const Expanded(
                           child: Column(
                             crossAxisAlignment:
-                                CrossAxisAlignment
-                                    .start,
+                                CrossAxisAlignment.start,
                             children: [
                               Text(
                                 'Cab Comparison',
                                 style: TextStyle(
                                   fontSize: 22,
-                                  fontWeight:
-                                      FontWeight.w800,
+                                  fontWeight: FontWeight.w800,
                                 ),
                               ),
                               SizedBox(
@@ -955,19 +889,15 @@ class HomeScreenState extends State<HomeScreen> {
                                 'Compare your available ride options',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color:
-                                      Colors.grey,
+                                  color: Colors.grey,
                                 ),
                               ),
                             ],
                           ),
                         ),
-
                         IconButton(
                           onPressed: () =>
-                              Navigator.pop(
-                            dialogContext,
-                          ),
+                              Navigator.pop(dialogContext),
                           icon: const Icon(
                             Icons.close_rounded,
                           ),
@@ -985,22 +915,15 @@ class HomeScreenState extends State<HomeScreen> {
 
                     Container(
                       width: double.infinity,
-
-                      padding:
-                          const EdgeInsets.symmetric(
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 15,
                         vertical: 12,
                       ),
-
-                      decoration:
-                          BoxDecoration(
+                      decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
+                            BorderRadius.circular(16),
                       ),
-
                       child: Row(
                         children: [
                           const Icon(
@@ -1008,17 +931,14 @@ class HomeScreenState extends State<HomeScreen> {
                             size: 20,
                             color: Colors.blue,
                           ),
-
                           const SizedBox(
                             width: 9,
                           ),
-
                           Expanded(
                             child: Text(
                               '$totalDistance  •  '
                               '$totalDuration',
-                              style:
-                                  const TextStyle(
+                              style: const TextStyle(
                                 fontWeight:
                                     FontWeight.w600,
                                 fontSize: 14,
@@ -1041,8 +961,7 @@ class HomeScreenState extends State<HomeScreen> {
                       'Available Rides',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight:
-                            FontWeight.w800,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
 
@@ -1053,34 +972,24 @@ class HomeScreenState extends State<HomeScreen> {
                     ...rides.map<Widget>(
                       (dynamic ride) {
                         if (ride is! Map) {
-                          return const SizedBox
-                              .shrink();
+                          return const SizedBox.shrink();
                         }
 
                         return _buildRideCard(
                           provider:
-                              ride['provider']
-                                      ?.toString() ??
+                              ride['provider']?.toString() ??
                                   'Unknown',
-
                           category:
-                              ride['category']
-                                      ?.toString() ??
+                              ride['category']?.toString() ??
                                   '',
-
                           fare:
-                              ride['fare']
-                                      ?.toString() ??
+                              ride['fare']?.toString() ??
                                   'N/A',
-
                           eta:
-                              ride['eta']
-                                      ?.toString() ??
+                              ride['eta']?.toString() ??
                                   'N/A',
-
                           score:
-                              ride['karoScore']
-                                      ?.toString() ??
+                              ride['karoScore']?.toString() ??
                                   'N/A',
                         );
                       },
@@ -1096,42 +1005,29 @@ class HomeScreenState extends State<HomeScreen> {
 
                     Container(
                       width: double.infinity,
-
-                      padding:
-                          const EdgeInsets.all(16),
-
-                      decoration:
-                          BoxDecoration(
-                        gradient:
-                            LinearGradient(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
                           colors: [
                             Colors.blue.shade50,
                             Colors.white,
                           ],
                         ),
-
                         borderRadius:
-                            BorderRadius.circular(
-                          20,
-                        ),
-
+                            BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.blue
-                              .withOpacity(0.15),
+                          color:
+                              Colors.blue.withOpacity(0.15),
                         ),
                       ),
-
                       child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
-
+                            CrossAxisAlignment.start,
                         children: [
                           const Row(
                             children: [
                               Icon(
-                                Icons
-                                    .auto_awesome_rounded,
+                                Icons.auto_awesome_rounded,
                                 color: Colors.blue,
                                 size: 22,
                               ),
@@ -1148,11 +1044,9 @@ class HomeScreenState extends State<HomeScreen> {
                               ),
                             ],
                           ),
-
                           const SizedBox(
                             height: 12,
                           ),
-
                           ...rides.map<Widget>(
                             (dynamic ride) {
                               if (ride is! Map) {
@@ -1171,7 +1065,6 @@ class HomeScreenState extends State<HomeScreen> {
                                         .symmetric(
                                   vertical: 5,
                                 ),
-
                                 child: Row(
                                   children: [
                                     Expanded(
@@ -1182,12 +1075,10 @@ class HomeScreenState extends State<HomeScreen> {
                                             const TextStyle(
                                           fontSize: 14,
                                           fontWeight:
-                                              FontWeight
-                                                  .w500,
+                                              FontWeight.w500,
                                         ),
                                       ),
                                     ),
-
                                     Container(
                                       padding:
                                           const EdgeInsets
@@ -1195,11 +1086,9 @@ class HomeScreenState extends State<HomeScreen> {
                                         horizontal: 9,
                                         vertical: 5,
                                       ),
-
                                       decoration:
                                           BoxDecoration(
-                                        color: Colors
-                                            .blue
+                                        color: Colors.blue
                                             .withOpacity(
                                           0.10,
                                         ),
@@ -1209,17 +1098,14 @@ class HomeScreenState extends State<HomeScreen> {
                                           10,
                                         ),
                                       ),
-
                                       child: Text(
                                         '$score/100',
                                         style:
                                             const TextStyle(
-                                          color:
-                                              Colors.blue,
+                                          color: Colors.blue,
                                           fontSize: 13,
                                           fontWeight:
-                                              FontWeight
-                                                  .w800,
+                                              FontWeight.w800,
                                         ),
                                       ),
                                     ),
@@ -1244,8 +1130,7 @@ class HomeScreenState extends State<HomeScreen> {
                       'Smart Recommendations',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight:
-                            FontWeight.w800,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
 
@@ -1282,14 +1167,12 @@ class HomeScreenState extends State<HomeScreen> {
                     Row(
                       children: [
                         Expanded(
-                          child:
-                              _buildActionButton(
+                          child: _buildActionButton(
                             'Open Ola',
                             Colors.yellow[700]!,
                             () async {
                               try {
-                                await LaunchApp
-                                    .openApp(
+                                await LaunchApp.openApp(
                                   androidPackageName:
                                       'com.olacabs.customer',
                                   openStore: false,
@@ -1302,20 +1185,16 @@ class HomeScreenState extends State<HomeScreen> {
                             },
                           ),
                         ),
-
                         const SizedBox(
                           width: 12,
                         ),
-
                         Expanded(
-                          child:
-                              _buildActionButton(
+                          child: _buildActionButton(
                             'Open Uber',
                             Colors.black,
                             () async {
                               try {
-                                await LaunchApp
-                                    .openApp(
+                                await LaunchApp.openApp(
                                   androidPackageName:
                                       'com.ubercab',
                                   openStore: false,
@@ -1343,8 +1222,7 @@ class HomeScreenState extends State<HomeScreen> {
                       child: Text(
                         'Fares shown are KaroCab '
                         'estimated/simulated values',
-                        textAlign:
-                            TextAlign.center,
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 11,
                           color: Colors.grey,
@@ -1390,23 +1268,14 @@ class HomeScreenState extends State<HomeScreen> {
         category.toLowerCase().contains('auto');
 
     return Container(
-      margin:
-          const EdgeInsets.only(bottom: 10),
-
-      padding:
-          const EdgeInsets.all(14),
-
-      decoration:
-          BoxDecoration(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
         color: Colors.white,
-
-        borderRadius:
-            BorderRadius.circular(18),
-
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: Colors.grey.shade200,
         ),
-
         boxShadow: const [
           BoxShadow(
             color: Colors.black12,
@@ -1415,7 +1284,6 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-
       child: Row(
         children: [
           // --------------------------------------------------------
@@ -1425,18 +1293,14 @@ class HomeScreenState extends State<HomeScreen> {
           Container(
             width: 45,
             height: 45,
-
-            decoration:
-                BoxDecoration(
+            decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius:
                   BorderRadius.circular(14),
             ),
-
             child: Icon(
               isAuto
-                  ? Icons
-                      .electric_rickshaw_rounded
+                  ? Icons.electric_rickshaw_rounded
                   : Icons.local_taxi_rounded,
               color: Colors.blue,
               size: 25,
@@ -1458,18 +1322,14 @@ class HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   '$provider $category',
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 15,
-                    fontWeight:
-                        FontWeight.w700,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-
                 const SizedBox(
                   height: 5,
                 ),
-
                 Row(
                   children: [
                     const Icon(
@@ -1477,38 +1337,30 @@ class HomeScreenState extends State<HomeScreen> {
                       size: 14,
                       color: Colors.grey,
                     ),
-
                     const SizedBox(
                       width: 4,
                     ),
-
                     Text(
                       '$eta min',
-                      style:
-                          const TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Colors.grey,
                       ),
                     ),
-
                     const SizedBox(
                       width: 10,
                     ),
-
                     const Icon(
                       Icons.auto_awesome_rounded,
                       size: 14,
                       color: Colors.blue,
                     ),
-
                     const SizedBox(
                       width: 4,
                     ),
-
                     Text(
                       score,
-                      style:
-                          const TextStyle(
+                      style: const TextStyle(
                         fontSize: 12,
                         color: Colors.blue,
                         fontWeight:
@@ -1527,11 +1379,9 @@ class HomeScreenState extends State<HomeScreen> {
 
           Text(
             '₹$fare',
-            style:
-                const TextStyle(
+            style: const TextStyle(
               fontSize: 17,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],
@@ -1550,84 +1400,58 @@ class HomeScreenState extends State<HomeScreen> {
   }) {
     if (ride.isEmpty) {
       return Container(
-        margin:
-            const EdgeInsets.only(bottom: 8),
-
-        padding:
-            const EdgeInsets.all(14),
-
-        decoration:
-            BoxDecoration(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
           color: Colors.grey.shade100,
-          borderRadius:
-              BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(16),
         ),
-
         child: Text(
           '$emoji  $title: N/A',
-          style:
-              const TextStyle(
+          style: const TextStyle(
             fontSize: 14,
-            fontWeight:
-                FontWeight.w600,
+            fontWeight: FontWeight.w600,
           ),
         ),
       );
     }
 
     final String provider =
-        ride['provider']?.toString() ??
-            'N/A';
+        ride['provider']?.toString() ?? 'N/A';
 
     final String category =
-        ride['category']?.toString() ??
-            '';
+        ride['category']?.toString() ?? '';
 
     final String fare =
-        ride['fare']?.toString() ??
-            'N/A';
+        ride['fare']?.toString() ?? 'N/A';
 
     final String score =
-        ride['karoScore']?.toString() ??
-            'N/A';
+        ride['karoScore']?.toString() ?? 'N/A';
 
     final String eta =
-        ride['eta']?.toString() ??
-            'N/A';
+        ride['eta']?.toString() ?? 'N/A';
 
     return Container(
-      margin:
-          const EdgeInsets.only(bottom: 8),
-
-      padding:
-          const EdgeInsets.all(14),
-
-      decoration:
-          BoxDecoration(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
         color: Colors.grey.shade50,
-
-        borderRadius:
-            BorderRadius.circular(16),
-
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Colors.grey.shade200,
         ),
       ),
-
       child: Row(
         children: [
           Text(
             emoji,
-            style:
-                const TextStyle(
+            style: const TextStyle(
               fontSize: 21,
             ),
           ),
-
           const SizedBox(
             width: 10,
           ),
-
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -1635,37 +1459,28 @@ class HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   title,
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 13,
                     color: Colors.grey,
-                    fontWeight:
-                        FontWeight.w600,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-
                 const SizedBox(
                   height: 3,
                 ),
-
                 Text(
                   '$provider $category',
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 15,
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-
                 const SizedBox(
                   height: 3,
                 ),
-
                 Text(
                   '₹$fare  •  ETA $eta min',
-                  style:
-                      const TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
                   ),
@@ -1673,34 +1488,25 @@ class HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-
           const SizedBox(
             width: 8,
           ),
-
           Container(
-            padding:
-                const EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: 9,
               vertical: 6,
             ),
-
-            decoration:
-                BoxDecoration(
-              color: Colors.blue
-                  .withOpacity(0.10),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.10),
               borderRadius:
                   BorderRadius.circular(10),
             ),
-
             child: Text(
               '$score/100',
-              style:
-                  const TextStyle(
+              style: const TextStyle(
                 color: Colors.blue,
                 fontSize: 12,
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
@@ -1718,38 +1524,26 @@ class HomeScreenState extends State<HomeScreen> {
     Color color,
     VoidCallback onPressed,
   ) {
-    final bool isBlack =
-        color == Colors.black;
+    final bool isBlack = color == Colors.black;
 
     return SizedBox(
       height: 48,
-
       child: ElevatedButton(
-        style:
-            ElevatedButton.styleFrom(
+        style: ElevatedButton.styleFrom(
           backgroundColor: color,
-
-          foregroundColor: isBlack
-              ? Colors.white
-              : Colors.black,
-
+          foregroundColor:
+              isBlack ? Colors.white : Colors.black,
           elevation: 0,
-
-          shape:
-              RoundedRectangleBorder(
+          shape: RoundedRectangleBorder(
             borderRadius:
                 BorderRadius.circular(15),
           ),
         ),
-
         onPressed: onPressed,
-
         child: Text(
           text,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.w700,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),
@@ -1797,12 +1591,10 @@ class HomeScreenState extends State<HomeScreen> {
       Uri.parse(
         'https://cab-karo.onrender.com/estimate',
       ),
-
       headers: const <String, String>{
         'Content-Type':
             'application/json; charset=UTF-8',
       },
-
       body: jsonEncode(
         <String, dynamic>{
           'distance': distance,

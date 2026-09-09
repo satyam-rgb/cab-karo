@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:karocab/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
@@ -37,6 +39,43 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ------------------------------------------------------------
+  // SAVE / UPDATE USER PROFILE IN FIRESTORE
+  // ------------------------------------------------------------
+  Future<void> _saveUserProfile() async {
+    final user = _auth.currentUser;
+
+    if (user == null) return;
+
+    final userRef = _firestore.collection('users').doc(user.uid);
+    final userSnapshot = await userRef.get();
+
+    final Map<String, dynamic> data = {
+      'phone': user.phoneNumber ?? '',
+      'lastLoginAt': FieldValue.serverTimestamp(),
+    };
+
+    // Create default profile data only for a new user.
+    if (!userSnapshot.exists) {
+      data.addAll({
+        'createdAt': FieldValue.serverTimestamp(),
+        'preferences': {
+          'mode': 'balanced',
+          'comfort': false,
+        },
+        'monthlyBudget': 0,
+      });
+    }
+
+    await userRef.set(
+      data,
+      SetOptions(merge: true),
+    );
+  }
+
+  // ------------------------------------------------------------
+  // SEND OTP
+  // ------------------------------------------------------------
   Future<void> handleLogin() async {
     var phone =
         _phoneController.text.trim().replaceAll(RegExp(r'[\s-]'), '');
@@ -66,6 +105,9 @@ class _LoginScreenState extends State<LoginScreen> {
         verificationCompleted: (PhoneAuthCredential credential) async {
           try {
             await _auth.signInWithCredential(credential);
+
+            // Save user in Firestore.
+            await _saveUserProfile();
 
             if (mounted) {
               openHomePage();
@@ -127,6 +169,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ------------------------------------------------------------
+  // VERIFY OTP
+  // ------------------------------------------------------------
   Future<void> verifyOtp() async {
     final otp = _otpController.text.trim();
 
@@ -151,6 +196,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       await _auth.signInWithCredential(credential);
+
+      // Save user profile to Firestore.
+      await _saveUserProfile();
 
       if (mounted) {
         openHomePage();
@@ -186,6 +234,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ------------------------------------------------------------
+  // OPEN HOME
+  // ------------------------------------------------------------
   void openHomePage() {
     if (!mounted) return;
 
@@ -198,6 +249,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ------------------------------------------------------------
+  // UI
+  // ------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
