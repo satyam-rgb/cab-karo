@@ -1,0 +1,8 @@
+{
+  "name": "KaroCab",
+  "description": "Compare cab prices, KaroScore smart ride recommendations, route comparison, price alerts, and emergency KaroSafe support.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
