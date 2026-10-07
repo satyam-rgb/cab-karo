@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0",
+  "methodology": "KaroScore Multi-Factor Min-Max Weighted Scoring",
+  "modes": {
+    "budget": {
+      "name": "Budget",
+      "weights": {
+        "price": 0.40,
+        "eta": 0.10,
+        "duration": 0.10,
+        "safety": 0.15,
+        "comfort": 0.10,
+        "reliability": 0.15
+      },
+      "description": "Prioritizes lowest fare while maintaining baseline safety & reliability."
+    },
+    "hurry": {
+      "name": "Hurry",
+      "weights": {
+        "price": 0.10,
+        "eta": 0.30,
+        "duration": 0.25,
+        "safety": 0.15,
+        "comfort": 0.10,
+        "reliability": 0.10
+      },
+      "description": "Prioritizes fastest arrival and shortest trip duration."
+    },
+    "balanced": {
+      "name": "Balanced",
+      "weights": {
+        "price": 0.25,
+        "eta": 0.20,
+        "duration": 0.15,
+        "safety": 0.15,
+        "comfort": 0.15,
+        "reliability": 0.10
+      },
+      "description": "Optimal trade-off between price, pickup speed, comfort, and safety."
+    }
+  },
+  "formulas": {
+    "lowerIsBetter": "((Max - Current) / (Max - Min)) * 100",
+    "higherIsBetter": "((Current - Min) / (Max - Min)) * 100",
+    "equalMinMaxFallback": 100
+  }
+}

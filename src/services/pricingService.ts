@@ -5,6 +5,7 @@ import {
   RegressionMetrics,
   ScoreExplanation,
   LocationCoordinate,
+  LocationResult,
   ScoreMode
 } from '../types';
 
@@ -481,13 +482,13 @@ export function calculateKaroScore(
   // Mode weights as specified in rules:
   // Budget mode: Price 40%, ETA 10%, Duration 10%, Safety 15%, Comfort 10%, Reliability 15%
   // Hurry mode:  Price 10%, ETA 30%, Duration 25%, Safety 15%, Comfort 10%, Reliability 10%
-  // Balanced mode: Price 30%, ETA 20%, Duration 15%, Safety 15%, Comfort 10%, Reliability 10%
+  // Balanced mode: Price 25%, ETA 20%, Duration 15%, Safety 15%, Comfort 15%, Reliability 10%
   const weights =
     mode === 'hurry'
       ? { price: 0.10, eta: 0.30, duration: 0.25, safety: 0.15, comfort: 0.10, reliability: 0.10 }
       : mode === 'budget'
       ? { price: 0.40, eta: 0.10, duration: 0.10, safety: 0.15, comfort: 0.10, reliability: 0.15 }
-      : { price: 0.30, eta: 0.20, duration: 0.15, safety: 0.15, comfort: 0.10, reliability: 0.10 };
+      : { price: 0.25, eta: 0.20, duration: 0.15, safety: 0.15, comfort: 0.15, reliability: 0.10 };
 
   return rides.map((ride) => {
     // 1. Lower is better factors
@@ -946,6 +947,7 @@ export function generateLocalPricing({
 
     return {
       ...ride,
+      dataSource: 'demo_estimate' as const,
       highlights,
       explanation: generateScoreExplanation(ride)
     };
@@ -965,6 +967,8 @@ export function generateLocalPricing({
 
   return {
     source: 'local_engine',
+    dataSource: 'demo_estimate',
+    pricingNotice: 'Simulated fare estimate benchmark (Live provider APIs not connected)',
     distance: round2(distance),
     duration: Number(duration),
     rides: highlightedRides,
@@ -986,9 +990,9 @@ export function generateLocalPricing({
     farePrediction,
     recommendationModel: {
       balancedWeights: {
-        price: mode === 'budget' ? 40 : mode === 'hurry' ? 10 : 30,
+        price: mode === 'budget' ? 40 : mode === 'hurry' ? 10 : 25,
         speed: mode === 'budget' ? 20 : mode === 'hurry' ? 55 : 35,
-        karoScore: mode === 'budget' ? 40 : mode === 'hurry' ? 35 : 35
+        karoScore: mode === 'budget' ? 40 : mode === 'hurry' ? 35 : 40
       },
       note: 'Recommendations calculated transparently via min-max factor normalization and KaroScore weights.'
     }
@@ -1087,26 +1091,212 @@ export function decodePolyline(encoded: string): LocationCoordinate[] {
   return poly;
 }
 
+export interface CityContext {
+  name: string;
+  state: string;
+  country: string;
+  lat: number;
+  lon: number;
+  radiusKm: number;
+}
+
+export const KNOWN_CITIES: Record<string, CityContext> = {
+  nagpur: { name: 'Nagpur', state: 'Maharashtra', country: 'India', lat: 21.1458, lon: 79.0882, radiusKm: 45 },
+  pune: { name: 'Pune', state: 'Maharashtra', country: 'India', lat: 18.5204, lon: 73.8567, radiusKm: 55 },
+  mumbai: { name: 'Mumbai', state: 'Maharashtra', country: 'India', lat: 19.0760, lon: 72.8777, radiusKm: 65 },
+  delhi: { name: 'Delhi', state: 'Delhi', country: 'India', lat: 28.6139, lon: 77.2090, radiusKm: 60 },
+  'new delhi': { name: 'New Delhi', state: 'Delhi', country: 'India', lat: 28.6139, lon: 77.2090, radiusKm: 50 },
+  jaipur: { name: 'Jaipur', state: 'Rajasthan', country: 'India', lat: 26.9124, lon: 75.7873, radiusKm: 50 },
+  bengaluru: { name: 'Bengaluru', state: 'Karnataka', country: 'India', lat: 12.9716, lon: 77.5946, radiusKm: 55 },
+  bangalore: { name: 'Bengaluru', state: 'Karnataka', country: 'India', lat: 12.9716, lon: 77.5946, radiusKm: 55 },
+  hyderabad: { name: 'Hyderabad', state: 'Telangana', country: 'India', lat: 17.3850, lon: 78.4867, radiusKm: 55 },
+  chennai: { name: 'Chennai', state: 'Tamil Nadu', country: 'India', lat: 13.0827, lon: 80.2707, radiusKm: 50 },
+  kolkata: { name: 'Kolkata', state: 'West Bengal', country: 'India', lat: 22.5726, lon: 88.3639, radiusKm: 50 },
+  ahmedabad: { name: 'Ahmedabad', state: 'Gujarat', country: 'India', lat: 23.0225, lon: 72.5714, radiusKm: 50 },
+  surat: { name: 'Surat', state: 'Gujarat', country: 'India', lat: 21.1702, lon: 72.8311, radiusKm: 45 },
+  lucknow: { name: 'Lucknow', state: 'Uttar Pradesh', country: 'India', lat: 26.8467, lon: 80.9462, radiusKm: 45 },
+  indore: { name: 'Indore', state: 'Madhya Pradesh', country: 'India', lat: 22.7196, lon: 75.8577, radiusKm: 45 },
+  bhopal: { name: 'Bhopal', state: 'Madhya Pradesh', country: 'India', lat: 23.2599, lon: 77.4126, radiusKm: 45 },
+  chandigarh: { name: 'Chandigarh', state: 'Chandigarh', country: 'India', lat: 30.7333, lon: 76.7794, radiusKm: 40 }
+};
+
+export function detectCityContext(query: string): { city: CityContext; hasExplicitCity: boolean } {
+  const q = query.toLowerCase();
+  for (const [key, ctx] of Object.entries(KNOWN_CITIES)) {
+    const regex = new RegExp(`\\b${key}\\b`, 'i');
+    if (regex.test(q)) {
+      return { city: ctx, hasExplicitCity: true };
+    }
+  }
+  return { city: KNOWN_CITIES.nagpur, hasExplicitCity: false };
+}
+
+export function haversineDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+export function isValidCoordinate(lat: number, lon: number): boolean {
+  return (
+    typeof lat === 'number' &&
+    typeof lon === 'number' &&
+    !isNaN(lat) &&
+    !isNaN(lon) &&
+    lat >= -90 &&
+    lat <= 90 &&
+    lon >= -180 &&
+    lon <= 180 &&
+    !(lat === 0 && lon === 0)
+  );
+}
+
+export function isGeographicallyRelevant(
+  lat: number,
+  lon: number,
+  displayName: string,
+  city: CityContext,
+  hasExplicitCity: boolean,
+  originalQuery?: string
+): boolean {
+  if (!isValidCoordinate(lat, lon)) return false;
+  const dist = haversineDistanceKm(lat, lon, city.lat, city.lon);
+  const lowerDisp = displayName.toLowerCase();
+  const lowerCity = city.name.toLowerCase();
+
+  const isWithinDistance = hasExplicitCity ? dist <= city.radiusKm * 1.8 : dist <= city.radiusKm;
+  const mentionsCity = lowerDisp.includes(lowerCity);
+
+  if (!isWithinDistance && !mentionsCity) return false;
+
+  // If originalQuery is provided, ensure the result isn't just a generic city centroid fallback
+  if (originalQuery) {
+    const queryWords = originalQuery
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length > 2 && w !== lowerCity && w !== 'india' && w !== 'maharashtra');
+
+    if (queryWords.length > 0) {
+      const hasWordMatch = queryWords.some((w) => lowerDisp.includes(w));
+      if (!hasWordMatch) {
+        // If query was specific and no keyword matched, reject bare city-level fallback
+        const isGenericCity =
+          lowerDisp === `${lowerCity}, maharashtra` ||
+          lowerDisp === `${lowerCity}, india` ||
+          lowerDisp === lowerCity;
+        if (isGenericCity) return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+export function generateProgressiveQueries(rawQuery: string, city: CityContext): string[] {
+  const cleaned = rawQuery.trim().replace(/\s+/g, ' ');
+  const queries: string[] = [];
+  const hasCityExplicit = cleaned.toLowerCase().includes(city.name.toLowerCase());
+
+  const fullCitySuffix = hasCityExplicit ? ', India' : `, ${city.name}, ${city.state}, India`;
+  const shortCitySuffix = hasCityExplicit ? '' : `, ${city.name}`;
+
+  // Strip door/house/plot numbers, unit/room/flat numbers, and PIN codes
+  // e.g. "Shantinagar Marwadi, 4002" -> "Shantinagar Marwadi"
+  const strippedNumber = cleaned
+    .replace(/(?:plot|no|house|flat|ward|block|room|shop|h\.no|p\.no)\s*[:#.]?\s*\w+/gi, '')
+    .replace(/\b\d{1,6}\b/g, '')
+    .replace(/,(\s*,)+/g, ',')
+    .replace(/^[\s,]+|[\s,]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Comma-separated segments: Primary locality / street
+  const parts = cleaned.split(',').map((p) => p.trim()).filter(Boolean);
+  const primarySegment = parts.length > 0 ? parts[0] : cleaned;
+  const primaryWord = primarySegment.split(' ')[0] || '';
+
+  // Attempt 1: Exact query with local city suffix (e.g. "Shantinagar Marwadi, 4002, Nagpur")
+  queries.push(`${cleaned}${shortCitySuffix}`);
+
+  // Attempt 2: Strip house/plot numbers, unit numbers, door numbers (e.g. "Shantinagar Marwadi, Nagpur")
+  if (strippedNumber && strippedNumber !== cleaned) {
+    queries.push(`${strippedNumber}${shortCitySuffix}`);
+  }
+
+  // Attempt 3: Locality level / primary segment (e.g. "Shantinagar, Nagpur")
+  if (parts.length > 1) {
+    const strippedPart = parts[0].replace(/\b\d+\b/g, '').trim();
+    if (strippedPart) {
+      queries.push(`${strippedPart}${shortCitySuffix}`);
+    }
+    if (primaryWord && primaryWord.length > 3 && primaryWord !== parts[0]) {
+      queries.push(`${primaryWord}${shortCitySuffix}`);
+    }
+  } else {
+    const words = cleaned.split(' ');
+    if (words.length > 1) {
+      queries.push(`${words[0]}${shortCitySuffix}`);
+    }
+  }
+
+  // Attempt 4: Cleaned with full state & country context (e.g. "Shantinagar Marwadi, 4002, Nagpur, Maharashtra, India")
+  queries.push(`${cleaned}${fullCitySuffix}`);
+
+  // Attempt 5: Stripped number with full state & country context
+  if (strippedNumber && strippedNumber !== cleaned) {
+    queries.push(`${strippedNumber}${fullCitySuffix}`);
+  }
+
+  // Attempt 6: Raw cleaned query without any suffixes
+  queries.push(cleaned);
+  if (strippedNumber && strippedNumber !== cleaned) {
+    queries.push(strippedNumber);
+  }
+
+  return Array.from(new Set(queries.map((q) => q.replace(/\s+/g, ' ').trim()))).filter(Boolean);
+}
+
+import { locationSearchService } from './locationSearchService';
+
 export const EMERGENCY_OFFLINE_COORDS: Record<string, LocationCoordinate> = {
-  'nagpur railway station': { latitude: 21.1514, longitude: 79.0904 },
-  'itwari railway station': { latitude: 21.1575, longitude: 79.1188 },
-  'itwari': { latitude: 21.1575, longitude: 79.1188 },
-  'nagpur airport': { latitude: 21.0895, longitude: 79.0460 },
-  'dr. babasaheb ambedkar international airport': { latitude: 21.0895, longitude: 79.0460 },
+  'nagpur railway station': { latitude: 21.1524, longitude: 79.0887 },
+  'itwari railway station': { latitude: 21.1583, longitude: 79.1171 },
+  'itwari': { latitude: 21.1583, longitude: 79.1171 },
+  'shantinagar': { latitude: 21.159094, longitude: 79.126273 },
+  'shantinagar nagpur': { latitude: 21.159094, longitude: 79.126273 },
+  'shantinagar marwadi': { latitude: 21.159094, longitude: 79.126273 },
+  'shantinagar marwadi nagpur': { latitude: 21.159094, longitude: 79.126273 },
+  'nagpur airport': { latitude: 21.0922, longitude: 79.0474 },
+  'dr. babasaheb ambedkar international airport': { latitude: 21.0922, longitude: 79.0474 },
   'nagpur': { latitude: 21.1458, longitude: 79.0882 },
   'sitabuldi': { latitude: 21.1466, longitude: 79.0832 },
   'dharampeth': { latitude: 21.1415, longitude: 79.0611 },
   'futala lake': { latitude: 21.1558, longitude: 79.0442 },
   'deekshabhoomi': { latitude: 21.1278, longitude: 79.0682 },
-  'pune': { latitude: 18.5214, longitude: 73.8545 },
-  'mumbai': { latitude: 19.0550, longitude: 72.8692 },
-  'delhi': { latitude: 28.6665, longitude: 77.2170 },
+  'mg road nagpur': { latitude: 21.1466, longitude: 79.0832 },
+  'sadar nagpur': { latitude: 21.1601, longitude: 79.0789 },
+  'gandhibagh': { latitude: 21.1522, longitude: 79.1050 },
+  'ramdaspeth': { latitude: 21.1350, longitude: 79.0750 },
+  'mihan': { latitude: 21.0500, longitude: 79.0400 },
+  'civil lines nagpur': { latitude: 21.1550, longitude: 79.0700 },
+  'pune': { latitude: 18.5204, longitude: 73.8567 },
+  'pune railway station': { latitude: 18.5284, longitude: 73.8744 },
+  'shivaji nagar pune': { latitude: 18.5314, longitude: 73.8446 },
+  'pune airport': { latitude: 18.5822, longitude: 73.9197 },
+  'mumbai': { latitude: 19.0760, longitude: 72.8777 },
+  'delhi': { latitude: 28.6139, longitude: 77.2090 },
   'new delhi': { latitude: 28.6139, longitude: 77.2090 },
-  'jaipur': { latitude: 26.9155, longitude: 75.8190 },
+  'jaipur': { latitude: 26.9124, longitude: 75.7873 },
   'bengaluru': { latitude: 12.9716, longitude: 77.5946 },
   'bangalore': { latitude: 12.9716, longitude: 77.5946 },
-  'indiranagar': { latitude: 12.9784, longitude: 77.6408 },
-  'koramangala': { latitude: 12.9352, longitude: 77.6245 },
   'hyderabad': { latitude: 17.3850, longitude: 78.4867 },
   'chennai': { latitude: 13.0827, longitude: 80.2707 },
   'kolkata': { latitude: 22.5726, longitude: 88.3639 },
@@ -1115,123 +1305,140 @@ export const EMERGENCY_OFFLINE_COORDS: Record<string, LocationCoordinate> = {
   'lucknow': { latitude: 26.8467, longitude: 80.9462 },
   'chandigarh': { latitude: 30.7333, longitude: 76.7794 },
   'indore': { latitude: 22.7196, longitude: 75.8577 },
-  'bhopal': { latitude: 23.2599, longitude: 77.4126 },
-  'goa': { latitude: 15.2993, longitude: 74.1240 },
-  'kochi': { latitude: 9.9312, longitude: 76.2673 }
+  'bhopal': { latitude: 23.2599, longitude: 77.4126 }
 };
 
 export const KNOWN_DESTINATIONS = EMERGENCY_OFFLINE_COORDS;
 
-const geocodeMemoryCache = new Map<string, LocationCoordinate>();
+const geocodeMemoryCache = new Map<string, LocationResult>();
 
 /**
- * General-purpose real-world geocoding for any valid location, address, or landmark.
- * Uses live OpenStreetMap Nominatim and Komoot Photon with memory caching and offline fallback.
+ * Robust geocoding pipeline powered by the LocationSearchService aggregator
+ * (Nominatim, Photon, Overpass, Local Gazetteer, and Postal Areas).
  */
-export async function geocodeLocation(name: string): Promise<LocationCoordinate> {
-  const query = name.trim();
-  if (!query) {
+export async function geocodeLocation(name: string, options?: any): Promise<LocationResult> {
+  const rawQuery = name.trim();
+  if (!rawQuery) {
     throw new Error('Location query cannot be empty.');
   }
 
-  const cacheKey = query.toLowerCase();
+  const cacheKey = rawQuery.toLowerCase();
   if (geocodeMemoryCache.has(cacheKey)) {
     return geocodeMemoryCache.get(cacheKey)!;
   }
 
-  // 1. Live Nominatim geocoding with India regional bias
   try {
-    const formattedQuery = query.toLowerCase().includes('india') ? query : `${query}, India`;
+    const aggResult = await locationSearchService.geocode(rawQuery, options);
+    const result: LocationResult = {
+      query: rawQuery,
+      displayName: aggResult.displayName,
+      latitude: aggResult.latitude,
+      longitude: aggResult.longitude,
+      city: aggResult.city,
+      state: aggResult.state,
+      source: aggResult.source,
+      confidence: aggResult.confidence,
+      placeType: aggResult.type
+    };
+    geocodeMemoryCache.set(cacheKey, result);
+    return result;
+  } catch (err: any) {
+    // Check emergency landmark table before throwing
+    for (const [key, coord] of Object.entries(EMERGENCY_OFFLINE_COORDS)) {
+      if (cacheKey === key || cacheKey.includes(key) || key.includes(cacheKey)) {
+        const result: LocationResult = {
+          query: rawQuery,
+          displayName: `${rawQuery} (Nagpur)`,
+          latitude: coord.latitude,
+          longitude: coord.longitude,
+          city: 'Nagpur',
+          state: 'Maharashtra',
+          source: 'landmark_table',
+          confidence: 0.9
+        };
+        geocodeMemoryCache.set(cacheKey, result);
+        return result;
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Debounced search suggestions returning structured LocationResult objects
+ * with place name, locality, and validated coordinates from LocationSearchService.
+ */
+export async function fetchLocationSuggestions(query: string, options?: any): Promise<LocationResult[]> {
+  const clean = query.trim();
+  if (clean.length < 2) return [];
+
+  const results = await locationSearchService.search(clean, options);
+  return results.map((r) => ({
+    query: clean,
+    displayName: r.displayName,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    city: r.city,
+    state: r.state,
+    source: r.source,
+    confidence: r.confidence,
+    placeType: r.type,
+    // preserve full search result
+    ...r
+  }));
+}
+
+/**
+ * Reverse geocodes real GPS coordinates to address details for Current Location
+ */
+export async function reverseGeocode(lat: number, lon: number): Promise<LocationResult> {
+  if (!isValidCoordinate(lat, lon)) {
+    throw new Error('Invalid GPS coordinates provided.');
+  }
+
+  try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(formattedQuery)}&limit=1`;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`;
     const res = await fetch(url, {
-      signal: controller.signal
+      signal: controller.signal,
+      headers: { 'User-Agent': 'KaroCab-Mobility/1.0' }
     });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const list = await res.json();
-      if (list && list.length > 0 && list[0].lat && list[0].lon) {
-        const coord: LocationCoordinate = {
-          latitude: parseFloat(list[0].lat),
-          longitude: parseFloat(list[0].lon)
-        };
-        geocodeMemoryCache.set(cacheKey, coord);
-        return coord;
-      }
-    }
-  } catch (_e) {
-    // Retry without ', India' suffix or try Photon
-  }
-
-  // 2. Retry without suffix in case of specific raw address format
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
-    const res = await fetch(url, {
-      signal: controller.signal
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok) {
-      const list = await res.json();
-      if (list && list.length > 0 && list[0].lat && list[0].lon) {
-        const coord: LocationCoordinate = {
-          latitude: parseFloat(list[0].lat),
-          longitude: parseFloat(list[0].lon)
-        };
-        geocodeMemoryCache.set(cacheKey, coord);
-        return coord;
-      }
-    }
-  } catch (_e) {
-    // Continue to Photon
-  }
-
-  // 3. Photon OSM Geocoding fallback (high CORS availability in browser)
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1`;
-    const res = await fetch(photonUrl, { signal: controller.signal });
     clearTimeout(timeoutId);
 
     if (res.ok) {
       const data = await res.json();
-      if (data && data.features && data.features.length > 0) {
-        const [lon, lat] = data.features[0].geometry.coordinates;
-        if (typeof lat === 'number' && typeof lon === 'number') {
-          const coord: LocationCoordinate = { latitude: lat, longitude: lon };
-          geocodeMemoryCache.set(cacheKey, coord);
-          return coord;
-        }
+      if (data && data.display_name) {
+        const addr = data.address || {};
+        const road = addr.road || addr.suburb || addr.neighbourhood || '';
+        const city = addr.city || addr.town || addr.county || 'Current Location';
+        const shortName = [road, city].filter(Boolean).join(', ') || data.display_name.split(',').slice(0, 2).join(', ');
+
+        return {
+          query: `${lat},${lon}`,
+          displayName: shortName,
+          latitude: lat,
+          longitude: lon,
+          city,
+          state: addr.state,
+          source: 'nominatim_reverse',
+          confidence: 0.95
+        };
       }
     }
   } catch (_e) {
-    // Continue to offline fallback table
+    // Fallback
   }
 
-  // 4. Exact emergency offline fallback
-  if (EMERGENCY_OFFLINE_COORDS[cacheKey]) {
-    const coord = EMERGENCY_OFFLINE_COORDS[cacheKey];
-    geocodeMemoryCache.set(cacheKey, coord);
-    return coord;
-  }
-
-  // 5. Case-insensitive key lookup in offline table
-  for (const [key, coord] of Object.entries(EMERGENCY_OFFLINE_COORDS)) {
-    if (cacheKey.toLowerCase() === key.toLowerCase()) {
-      geocodeMemoryCache.set(cacheKey, coord);
-      return coord;
-    }
-  }
-
-  throw new Error(`Could not find coordinates for "${name}". Please check the spelling or enter a nearby landmark.`);
+  return {
+    query: `${lat},${lon}`,
+    displayName: `Current Location (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+    latitude: lat,
+    longitude: lon,
+    source: 'gps_coordinates',
+    confidence: 0.80
+  };
 }
 
 export async function fetchOSRMRoute(
@@ -1241,6 +1448,9 @@ export async function fetchOSRMRoute(
   distanceKm: number;
   durationMinutes: number;
   coordinates: LocationCoordinate[];
+  isLiveRoute: boolean;
+  routeSource: 'osrm_live' | 'routing_fallback';
+  notice?: string;
 }> {
   const latDiff = Math.abs(origin.latitude - destination.latitude);
   const lonDiff = Math.abs(origin.longitude - destination.longitude);
@@ -1268,7 +1478,13 @@ export async function fetchOSRMRoute(
         const coordinates = decodePolyline(polyline);
 
         if (coordinates && coordinates.length > 1 && distanceKm > 0) {
-          return { distanceKm, durationMinutes, coordinates };
+          return {
+            distanceKm,
+            durationMinutes,
+            coordinates,
+            isLiveRoute: true,
+            routeSource: 'osrm_live'
+          };
         }
       }
     }
@@ -1276,7 +1492,7 @@ export async function fetchOSRMRoute(
     // Fallback if public OSRM is unreachable
   }
 
-  // Fallback: Haversine distance * 1.35 road winding factor
+  // Fallback: Haversine distance with explicit fallback indicator
   const R = 6371; // Earth radius in km
   const dLat = ((destination.latitude - origin.latitude) * Math.PI) / 180;
   const dLon = ((destination.longitude - origin.longitude) * Math.PI) / 180;
@@ -1297,22 +1513,12 @@ export async function fetchOSRMRoute(
   // Average city driving speed 32 km/h
   const roadDuration = Math.max(3, Math.round((roadDist / 32) * 60));
 
-  // Generate intermediate points with natural road curvature (full precision, NEVER round coordinates!)
-  const steps = Math.min(60, Math.max(15, Math.round(roadDist * 2.5)));
-  const coordinates: LocationCoordinate[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    // Slight organic perpendicular bulge to simulate road contour rather than pure straight vector
-    const bulge = Math.sin(t * Math.PI) * 0.04 * (destination.latitude - origin.latitude);
-    coordinates.push({
-      latitude: origin.latitude + (destination.latitude - origin.latitude) * t + bulge,
-      longitude: origin.longitude + (destination.longitude - origin.longitude) * t
-    });
-  }
-
   return {
     distanceKm: roadDist,
     durationMinutes: roadDuration,
-    coordinates
+    coordinates: [origin, destination],
+    isLiveRoute: false,
+    routeSource: 'routing_fallback',
+    notice: 'Live OSRM routing service was unavailable. Displaying straight-line path fallback.'
   };
 }

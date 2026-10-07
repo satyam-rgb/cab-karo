@@ -46,6 +46,7 @@ export interface Ride {
   reliability: number;
   safety: number;
   karoScore: number;
+  dataSource?: 'real_api' | 'demo_estimate';
   scores?: RideScores;
   scoreWeights?: RideScoreWeights;
   explanation?: ScoreExplanation;
@@ -105,6 +106,10 @@ export interface SmartRecommendations {
 
 export interface PricingResponse {
   source?: string;
+  dataSource?: 'real_api' | 'demo_estimate';
+  pricingNotice?: string;
+  isLiveRoute?: boolean;
+  routeSource?: 'osrm_live' | 'routing_fallback';
   distance: number;
   duration: number;
   rides: Ride[];
@@ -168,4 +173,52 @@ export interface EmergencyContact {
 export interface LocationCoordinate {
   latitude: number;
   longitude: number;
+}
+
+export type LocationPlaceType =
+  | 'address'
+  | 'locality'
+  | 'neighbourhood'
+  | 'road'
+  | 'school'
+  | 'college'
+  | 'hospital'
+  | 'clinic'
+  | 'institute'
+  | 'business'
+  | 'landmark'
+  | 'square'
+  | 'railway_station'
+  | 'airport'
+  | 'postal_area'
+  | 'poi';
+
+export interface LocationSearchResult {
+  id: string;
+  name: string;
+  displayName: string;
+  latitude: number;
+  longitude: number;
+  type: LocationPlaceType;
+  category?: string;
+  locality?: string;
+  city?: string;
+  district?: string;
+  state?: string;
+  postalCode?: string;
+  source: 'nominatim' | 'photon' | 'overpass' | 'google_places' | 'local_gazetteer' | 'postal_service';
+  confidence: number;
+  rawAddress?: string;
+}
+
+export interface LocationResult {
+  query: string;
+  displayName: string;
+  latitude: number;
+  longitude: number;
+  city?: string;
+  state?: string;
+  source: string;
+  confidence?: number;
+  placeType?: LocationPlaceType;
 }

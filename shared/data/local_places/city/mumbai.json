@@ -1,0 +1,53 @@
+[
+  {
+    "id": "mumbai-cst",
+    "name": "Chhatrapati Shivaji Maharaj Terminus (CSMT)",
+    "displayName": "Chhatrapati Shivaji Maharaj Terminus (CSMT), Fort, Mumbai",
+    "aliases": ["CST", "CSMT", "VT", "Victoria Terminus", "Mumbai CST"],
+    "type": "railway_station",
+    "category": "Railway Station",
+    "locality": "Fort",
+    "city": "Mumbai",
+    "district": "Mumbai City",
+    "state": "Maharashtra",
+    "postalCode": "400001",
+    "latitude": 18.9400,
+    "longitude": 72.8354,
+    "source": "local_gazetteer",
+    "confidence": 0.99
+  },
+  {
+    "id": "mumbai-airport",
+    "name": "Chhatrapati Shivaji Maharaj International Airport (BOM)",
+    "displayName": "Chhatrapati Shivaji Maharaj International Airport (BOM), Andheri, Mumbai",
+    "aliases": ["Mumbai Airport", "Sahar Airport", "Santa Cruz Airport", "T2 Mumbai"],
+    "type": "airport",
+    "category": "Airport",
+    "locality": "Andheri East",
+    "city": "Mumbai",
+    "district": "Mumbai Suburban",
+    "state": "Maharashtra",
+    "postalCode": "400099",
+    "latitude": 19.0896,
+    "longitude": 72.8656,
+    "source": "local_gazetteer",
+    "confidence": 0.99
+  },
+  {
+    "id": "mumbai-bandra-kurla-complex",
+    "name": "Bandra Kurla Complex (BKC)",
+    "displayName": "Bandra Kurla Complex (BKC) Business District, Bandra, Mumbai",
+    "aliases": ["BKC", "Bandra Kurla Complex", "BKC Mumbai"],
+    "type": "business",
+    "category": "Commercial Hub",
+    "locality": "Bandra East",
+    "city": "Mumbai",
+    "district": "Mumbai Suburban",
+    "state": "Maharashtra",
+    "postalCode": "400051",
+    "latitude": 19.0660,
+    "longitude": 72.8687,
+    "source": "local_gazetteer",
+    "confidence": 0.98
+  }
+]
