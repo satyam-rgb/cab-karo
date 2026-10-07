@@ -71,6 +71,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     longitude: 79.0474
   });
 
+  const [selectedLocation, setSelectedLocation] = useState<LocationCoordinate | null>(null);
+  const [selectionKey, setSelectionKey] = useState<number>(0);
+
   const [routeCoords, setRouteCoords] = useState<LocationCoordinate[]>([]);
   const [totalDistance, setTotalDistance] = useState('8.45 km');
   const [totalDuration, setTotalDuration] = useState('22 minutes');
@@ -111,6 +114,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const [isPriceAlertOpen, setIsPriceAlertOpen] = useState(false);
   const [selectedRideForAlert, setSelectedRideForAlert] = useState<Ride | null>(null);
 
+  const focusMapOnLocation = (coord: LocationCoordinate) => {
+    setSelectedLocation({ latitude: Number(coord.latitude), longitude: Number(coord.longitude) });
+    setSelectionKey((prev) => prev + 1);
+  };
+
   const renderPlaceIcon = (type?: string, isPickup = true) => {
     switch (type) {
       case 'school':
@@ -150,7 +158,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       setIsLoadingFromSuggestions(true);
       try {
         const results = (await fetchLocationSuggestions(clean, {
-          mapCenter: originCoord || { latitude: 21.1458, longitude: 79.0882 }
+          mapCenter: originCoord || destinationCoord || undefined
         })) as unknown as LocationSearchResult[];
         setFromSuggestions(results);
       } catch {
@@ -173,7 +181,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       setIsLoadingToSuggestions(true);
       try {
         const results = (await fetchLocationSuggestions(clean, {
-          mapCenter: originCoord || { latitude: 21.1458, longitude: 79.0882 }
+          mapCenter: destinationCoord || originCoord || undefined
         })) as unknown as LocationSearchResult[];
         setToSuggestions(results);
       } catch {
@@ -193,27 +201,29 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
 
     setIsLocatingUser(true);
     setRouteError(null);
+    setRouteCoords([]);
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
+        const newOrigin: LocationCoordinate = { latitude, longitude };
+        setOriginCoord(newOrigin);
+        focusMapOnLocation(newOrigin);
+
         try {
           const rev = await reverseGeocode(latitude, longitude);
           const displayName = rev.displayName || `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
           setFromAddress(displayName);
-          const newOrigin: LocationCoordinate = { latitude, longitude };
-          setOriginCoord(newOrigin);
           setIsLocatingUser(false);
           if (toAddress.trim()) {
             executeRouteSearch(displayName, toAddress, false, newOrigin, destinationCoord);
           }
         } catch {
-          const fallbackOrigin: LocationCoordinate = { latitude, longitude };
-          setFromAddress(`Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
-          setOriginCoord(fallbackOrigin);
+          const displayName = `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`;
+          setFromAddress(displayName);
           setIsLocatingUser(false);
           if (toAddress.trim()) {
-            executeRouteSearch('Current Location', toAddress, false, fallbackOrigin, destinationCoord);
+            executeRouteSearch(displayName, toAddress, false, newOrigin, destinationCoord);
           }
         }
       },
@@ -233,10 +243,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
    * Unified route search and calculation pipeline
    * Ensures that:
    * 1. Old route and markers are immediately cleared.
-   * 2. Current text inputs are geocoded to accurate coordinates (or uses explicit selected coords).
-   * 3. A new route is computed and polyline/distance/duration updated.
-   * 4. Fares are updated according to the new distance.
-   * 5. Map viewport fits both pickup and drop-off accurately.
+   * 2. Explicit selected coordinates are used directly without re-geocoding, or text inputs are geocoded when not yet resolved.
+   * 3. Map camera immediately moves to newly resolved coordinates.
+   * 4. A new route is computed and polyline/distance/duration updated.
+   * 5. Fares are updated according to the new distance.
    * 6. Asynchronous race-conditions are prevented via request IDs.
    */
   const executeRouteSearch = async (
@@ -249,8 +259,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     const cleanFrom = targetFrom.trim();
     const cleanTo = targetTo.trim();
 
-    if (!cleanFrom || !cleanTo) {
-      setRouteError('Please enter both pickup and destination locations.');
+    if (!cleanFrom && !cleanTo) {
+      setRouteError('Please enter pickup and destination locations.');
       return;
     }
 
@@ -258,36 +268,114 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
 
     // Reset old route, distance, and error states immediately before calculation
     setRouteError(null);
-    setIsLoadingRoute(true);
-    setIsFindingRides(true);
     setRouteCoords([]);
     if (!explicitOrigin) setOriginCoord(null);
     if (!explicitDest) setDestinationCoord(null);
 
+    setIsLoadingRoute(true);
+    setIsFindingRides(true);
+
     try {
-      // Step 1: Geocode current pickup & destination or use explicit coords
-      const origin = explicitOrigin || (await geocodeLocation(cleanFrom));
-      if (currentReqId !== activeRequestIdRef.current) return;
-      setOriginCoord({ latitude: origin.latitude, longitude: origin.longitude });
+      let resolvedOrigin: LocationCoordinate | null = explicitOrigin
+        ? { latitude: Number(explicitOrigin.latitude), longitude: Number(explicitOrigin.longitude) }
+        : null;
 
-      const destination = explicitDest || (await geocodeLocation(cleanTo));
-      if (currentReqId !== activeRequestIdRef.current) return;
-      setDestinationCoord({ latitude: destination.latitude, longitude: destination.longitude });
+      let resolvedDest: LocationCoordinate | null = explicitDest
+        ? { latitude: Number(explicitDest.latitude), longitude: Number(explicitDest.longitude) }
+        : null;
 
-      if (!origin || !destination) {
-        throw new Error('Unable to find coordinates for the given locations.');
+      // Step 1A: Resolve pickup if provided
+      if (cleanFrom && !resolvedOrigin) {
+        try {
+          const geocodedFrom = await geocodeLocation(cleanFrom, {
+            mapCenter: resolvedDest || undefined
+          });
+          if (currentReqId !== activeRequestIdRef.current) return;
+          resolvedOrigin = {
+            latitude: Number(geocodedFrom.latitude),
+            longitude: Number(geocodedFrom.longitude)
+          };
+          setOriginCoord(resolvedOrigin);
+          focusMapOnLocation(resolvedOrigin);
+        } catch (err: any) {
+          if (currentReqId === activeRequestIdRef.current) {
+            setOriginCoord(null);
+            setRouteCoords([]);
+            setPricingData(null);
+            setTotalDistance('--');
+            setTotalDuration('--');
+            setRouteError(err?.message || `Location not found: "${cleanFrom}"`);
+            setIsLoadingRoute(false);
+            setIsFindingRides(false);
+          }
+          return;
+        }
+      } else if (resolvedOrigin) {
+        setOriginCoord(resolvedOrigin);
       }
 
-      // Step 2: Fetch new route geometry & metrics from OSRM
-      const route = await fetchOSRMRoute(origin, destination);
+      // Step 1B: Resolve destination if provided
+      if (cleanTo && !resolvedDest) {
+        try {
+          const geocodedTo = await geocodeLocation(cleanTo, {
+            mapCenter: resolvedOrigin || undefined
+          });
+          if (currentReqId !== activeRequestIdRef.current) return;
+          resolvedDest = {
+            latitude: Number(geocodedTo.latitude),
+            longitude: Number(geocodedTo.longitude)
+          };
+          setDestinationCoord(resolvedDest);
+          focusMapOnLocation(resolvedDest);
+        } catch (err: any) {
+          if (currentReqId === activeRequestIdRef.current) {
+            setDestinationCoord(null);
+            setRouteCoords([]);
+            setPricingData(null);
+            setTotalDistance('--');
+            setTotalDuration('--');
+            setRouteError(err?.message || `Location not found: "${cleanTo}"`);
+            setIsLoadingRoute(false);
+            setIsFindingRides(false);
+          }
+          return;
+        }
+      } else if (resolvedDest) {
+        setDestinationCoord(resolvedDest);
+      }
+
+      // If only one endpoint is provided, keep camera & marker on that location without routing
+      if (!resolvedOrigin || !resolvedDest) {
+        if (currentReqId === activeRequestIdRef.current) {
+          setRouteCoords([]);
+          setPricingData(null);
+          setTotalDistance('--');
+          setTotalDuration('--');
+          setIsLoadingRoute(false);
+          setIsFindingRides(false);
+        }
+        return;
+      }
+
+      // Step 2: Fetch new route geometry & metrics from OSRM using exact coordinates
+      const route = await fetchOSRMRoute(resolvedOrigin, resolvedDest);
 
       if (currentReqId !== activeRequestIdRef.current) return;
 
-      setRouteCoords(route.coordinates);
-      setTotalDistance(`${route.distanceKm.toFixed(2)} km`);
-      setTotalDuration(`${route.durationMinutes} minutes`);
+      if (route.isLiveRoute && route.routeSource === 'osrm_live' && route.coordinates.length > 2) {
+        setRouteCoords(route.coordinates);
+        setTotalDistance(`${route.distanceKm.toFixed(2)} km`);
+        setTotalDuration(`${route.durationMinutes} minutes`);
+        setRouteError(null);
+      } else {
+        // OSRM failed after retry: keep markers, do NOT draw a straight line, and show clear notice
+        setRouteCoords([]);
+        setTotalDistance('Unavailable');
+        setTotalDuration('--');
+        setRouteError(route.notice || 'Road route temporarily unavailable');
+      }
 
-      // Step 3: Re-calculate fare comparison based on updated route
+      // Step 3: Re-calculate fare comparison (marked as fallback estimate if live route was unavailable)
       const estimate = await fetchPricingEstimate(
         route.distanceKm,
         route.durationMinutes,
@@ -296,7 +384,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
 
       if (currentReqId !== activeRequestIdRef.current) return;
 
-      setPricingData(estimate);
+      setPricingData({
+        ...estimate,
+        isLiveRoute: route.isLiveRoute,
+        routeSource: route.routeSource,
+        pricingNotice: route.isLiveRoute
+          ? estimate.pricingNotice
+          : 'Road route temporarily unavailable (fares based on approximate distance estimate)'
+      });
       setIsLoadingRoute(false);
       setIsFindingRides(false);
 
@@ -318,9 +413,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     }
   };
 
-  // Run initial route computation once on mount for demo
+  // Run initial route computation once on mount using default coordinates
   useEffect(() => {
-    executeRouteSearch(fromAddress, toAddress, false);
+    executeRouteSearch(fromAddress, toAddress, false, originCoord, destinationCoord);
   }, []);
 
   const handleSwapLocations = () => {
@@ -332,13 +427,24 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     setToAddress(nextTo);
     setOriginCoord(nextOrigin);
     setDestinationCoord(nextDest);
+    setRouteCoords([]);
+    if (nextDest) {
+      focusMapOnLocation(nextDest);
+    } else if (nextOrigin) {
+      focusMapOnLocation(nextOrigin);
+    }
     executeRouteSearch(nextFrom, nextTo, false, nextOrigin, nextDest);
   };
 
   const handleSelectQuickDest = (destName: string) => {
+    const knownCoord = KNOWN_DESTINATIONS[destName.toLowerCase()] || null;
     setToAddress(destName);
-    setDestinationCoord(null);
-    executeRouteSearch(fromAddress, destName, false, originCoord, null);
+    setDestinationCoord(knownCoord);
+    setRouteCoords([]);
+    if (knownCoord) {
+      focusMapOnLocation(knownCoord);
+    }
+    executeRouteSearch(fromAddress, destName, false, originCoord, knownCoord);
   };
 
   const handleSubmit = (e?: React.FormEvent) => {
@@ -428,8 +534,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                 value={fromAddress}
                 onFocus={() => setFromSuggestionsOpen(true)}
                 onChange={(e) => {
+                  activeRequestIdRef.current++;
                   setFromAddress(e.target.value);
                   setOriginCoord(null);
+                  setRouteCoords([]);
+                  setPricingData(null);
+                  setTotalDistance('--');
+                  setTotalDuration('--');
                   setRouteError(null);
                   setFromSuggestionsOpen(true);
                 }}
@@ -486,11 +597,16 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                         type="button"
                         onClick={() => {
                           const chosen = item.name || item.displayName;
+                          const coord: LocationCoordinate = {
+                            latitude: Number(item.latitude),
+                            longitude: Number(item.longitude)
+                          };
                           setFromAddress(chosen);
-                          const coord = { latitude: item.latitude, longitude: item.longitude };
                           setOriginCoord(coord);
+                          setRouteCoords([]);
+                          focusMapOnLocation(coord);
                           setFromSuggestionsOpen(false);
-                          if (destinationCoord || toAddress) {
+                          if (destinationCoord || toAddress.trim()) {
                             executeRouteSearch(chosen, toAddress, false, coord, destinationCoord);
                           }
                         }}
@@ -516,10 +632,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                         key={'from-' + name}
                         type="button"
                         onClick={() => {
+                          const knownCoord = KNOWN_DESTINATIONS[name.toLowerCase()] || null;
                           setFromAddress(name);
-                          setOriginCoord(null);
+                          setOriginCoord(knownCoord);
+                          setRouteCoords([]);
+                          if (knownCoord) {
+                            focusMapOnLocation(knownCoord);
+                          }
                           setFromSuggestionsOpen(false);
-                          executeRouteSearch(name, toAddress, false, null, destinationCoord);
+                          executeRouteSearch(name, toAddress, false, knownCoord, destinationCoord);
                         }}
                         className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-blue-50 text-xs font-semibold text-gray-800 transition flex items-center gap-2"
                       >
@@ -542,8 +663,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                 value={toAddress}
                 onFocus={() => setToSuggestionsOpen(true)}
                 onChange={(e) => {
+                  activeRequestIdRef.current++;
                   setToAddress(e.target.value);
                   setDestinationCoord(null);
+                  setRouteCoords([]);
+                  setPricingData(null);
+                  setTotalDistance('--');
+                  setTotalDuration('--');
                   setRouteError(null);
                   setToSuggestionsOpen(true);
                 }}
@@ -577,11 +703,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                         type="button"
                         onClick={() => {
                           const chosen = item.name || item.displayName;
+                          const coord: LocationCoordinate = {
+                            latitude: Number(item.latitude),
+                            longitude: Number(item.longitude)
+                          };
                           setToAddress(chosen);
-                          const coord = { latitude: item.latitude, longitude: item.longitude };
                           setDestinationCoord(coord);
+                          setRouteCoords([]);
+                          focusMapOnLocation(coord);
                           setToSuggestionsOpen(false);
-                          executeRouteSearch(fromAddress, chosen, false, originCoord, coord);
+                          if (originCoord || fromAddress.trim()) {
+                            executeRouteSearch(fromAddress, chosen, false, originCoord, coord);
+                          }
                         }}
                         className="w-full text-left px-2.5 py-2 rounded-xl hover:bg-blue-50 text-xs font-semibold text-gray-800 transition flex items-start gap-2.5 cursor-pointer"
                       >
@@ -605,10 +738,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                         key={'to-' + name}
                         type="button"
                         onClick={() => {
+                          const knownCoord = KNOWN_DESTINATIONS[name.toLowerCase()] || null;
                           setToAddress(name);
-                          setDestinationCoord(null);
+                          setDestinationCoord(knownCoord);
+                          setRouteCoords([]);
+                          if (knownCoord) {
+                            focusMapOnLocation(knownCoord);
+                          }
                           setToSuggestionsOpen(false);
-                          executeRouteSearch(fromAddress, name, false, originCoord, null);
+                          executeRouteSearch(fromAddress, name, false, originCoord, knownCoord);
                         }}
                         className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-blue-50 text-xs font-semibold text-gray-800 transition flex items-center gap-2"
                       >
@@ -734,6 +872,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
         <MapView
           origin={originCoord}
           destination={destinationCoord}
+          selectedLocation={selectedLocation}
+          selectionKey={selectionKey}
           routeCoordinates={routeCoords}
           isLoadingRoute={isLoadingRoute}
           routeError={routeError}

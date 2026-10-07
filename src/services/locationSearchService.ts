@@ -388,7 +388,7 @@ const allGazetteers: LocationSearchResult[] = [
 // PROVIDER 1: VERIFIED LOCAL GAZETTEER CACHE PROVIDER
 // =========================================================================
 class LocalGazetteerProvider {
-  search(query: string, city: CityInfo): LocationSearchResult[] {
+  search(query: string, _city: CityInfo): LocationSearchResult[] {
     const qLower = query.toLowerCase().trim();
     if (!qLower || qLower.length < 2) return [];
 
@@ -396,12 +396,7 @@ class LocalGazetteerProvider {
     const results: LocationSearchResult[] = [];
 
     for (const place of allGazetteers) {
-      if (place.city?.toLowerCase() !== city.name.toLowerCase() && !qLower.includes(place.city?.toLowerCase() || '')) {
-        continue;
-      }
-
       const pName = place.name.toLowerCase();
-      const pDisp = place.displayName.toLowerCase();
       const aliases = ((place as any).aliases || []).map((a: string) => a.toLowerCase());
 
       let match = false;
@@ -476,22 +471,19 @@ class PostalAreaProvider {
 // PROVIDER 3: NOMINATIM / OPENSTREETMAP PROVIDER
 // =========================================================================
 class NominatimProvider {
-  async search(query: string, city: CityInfo, options?: LocationSearchOptions): Promise<LocationSearchResult[]> {
+  async search(query: string, _city: CityInfo, _options?: LocationSearchOptions): Promise<LocationSearchResult[]> {
     const results: LocationSearchResult[] = [];
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-      const center = options?.mapCenter || { latitude: city.lat, longitude: city.lon };
-      // Bounding box: roughly +/- 0.35 deg (~38km)
-      const viewbox = `${center.longitude - 0.35},${center.latitude + 0.35},${center.longitude + 0.35},${center.latitude - 0.35}`;
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
         query
-      )}&limit=6&addressdetails=1&viewbox=${viewbox}&bounded=0`;
+      )}&limit=6&addressdetails=1`;
 
       const res = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'KaroCab-LocationSearch/2.0' }
+        headers: { 'Accept-Language': 'en' }
       });
       clearTimeout(timeoutId);
 
@@ -518,9 +510,9 @@ class NominatimProvider {
             type,
             category,
             locality: addr.suburb || addr.neighbourhood || addr.residential || addr.road,
-            city: addr.city || addr.town || addr.village || city.name,
+            city: addr.city || addr.town || addr.village || addr.municipality || addr.county || addr.state_district,
             district: addr.state_district || addr.county,
-            state: addr.state || city.state,
+            state: addr.state || addr.country,
             postalCode: addr.postcode,
             source: 'nominatim',
             confidence: 0.92
@@ -538,16 +530,13 @@ class NominatimProvider {
 // PROVIDER 4: PHOTON (KOMOOT POI & GEOCODER API)
 // =========================================================================
 class PhotonProvider {
-  async search(query: string, city: CityInfo, options?: LocationSearchOptions): Promise<LocationSearchResult[]> {
+  async search(query: string, _city: CityInfo, _options?: LocationSearchOptions): Promise<LocationSearchResult[]> {
     const results: LocationSearchResult[] = [];
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3200);
 
-      const center = options?.mapCenter || { latitude: city.lat, longitude: city.lon };
-      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(
-        query
-      )}&limit=6&lat=${center.latitude}&lon=${center.longitude}`;
+      const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=6`;
 
       const res = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
@@ -566,12 +555,16 @@ class PhotonProvider {
               rawName
             );
 
+            const resolvedCity = p.city || p.town || p.county || p.district;
+            const resolvedState = p.state || p.country;
+
             const display = [
               rawName,
               p.street,
               p.district || p.suburb,
-              p.city || city.name,
-              p.state || city.state
+              resolvedCity,
+              resolvedState,
+              p.country && p.country !== resolvedState ? p.country : undefined
             ]
               .filter(Boolean)
               .join(', ');
@@ -585,8 +578,8 @@ class PhotonProvider {
               type,
               category: p.osm_value ? `${p.osm_value.charAt(0).toUpperCase() + p.osm_value.slice(1)}` : category,
               locality: p.district || p.suburb || p.street,
-              city: p.city || city.name,
-              state: p.state || city.state,
+              city: resolvedCity,
+              state: resolvedState,
               postalCode: p.postcode,
               source: 'photon',
               confidence: 0.9
@@ -711,7 +704,6 @@ class GooglePlacesProvider {
     // Read optional client or server key
     try {
       this.apiKey =
-        (typeof process !== 'undefined' && process.env?.GOOGLE_PLACES_API_KEY) ||
         (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_GOOGLE_PLACES_API_KEY) ||
         null;
     } catch {
@@ -848,7 +840,7 @@ export class LocationSearchAggregator {
 
     // Photon search
     remotePromises.push(this.photon.search(primaryVariant, city, options));
-    if (variants.length > 1 && variants[1] !== primaryVariant) {
+    if (hasExplicitCity && variants.length > 1 && variants[1] !== primaryVariant) {
       remotePromises.push(this.photon.search(variants[1], city, options));
     }
 
@@ -934,7 +926,7 @@ export class LocationSearchAggregator {
   ): LocationSearchResult[] {
     const qLower = query.toLowerCase().trim();
     const qTokens = qLower.split(/[^a-z0-9]+/).filter((t) => t.length > 2);
-    const center = options?.mapCenter || { latitude: city.lat, longitude: city.lon };
+    const center = options?.mapCenter;
 
     return items
       .map((item) => {
@@ -944,29 +936,27 @@ export class LocationSearchAggregator {
 
         // 1. Exact name match
         if (nameLower === qLower) {
-          score += 45;
+          score += 50;
         } else if (nameLower.startsWith(qLower)) {
-          score += 30;
+          score += 35;
         } else if (nameLower.includes(qLower) || dispLower.includes(qLower)) {
-          score += 20;
+          score += 22;
         }
 
         // 2. Query tokens overlap
         if (qTokens.length > 0) {
           const matchedCount = qTokens.filter((t) => nameLower.includes(t) || dispLower.includes(t)).length;
-          score += (matchedCount / qTokens.length) * 25;
+          score += (matchedCount / qTokens.length) * 30;
         }
 
-        // 3. Proximity to map center
-        const distToCenter = haversineDistanceKm(item.latitude, item.longitude, center.latitude, center.longitude);
-        if (distToCenter < 5) {
-          score += 20;
-        } else if (distToCenter < 15) {
-          score += 15;
-        } else if (distToCenter < 35) {
-          score += 8;
-        } else if (distToCenter > 100 && !hasExplicitCity) {
-          score -= 30; // Strongly penalize locations in different regions
+        // 3. Mild proximity tie-breaker when mapCenter is available (never penalize global results)
+        if (center) {
+          const distToCenter = haversineDistanceKm(item.latitude, item.longitude, center.latitude, center.longitude);
+          if (distToCenter < 10) {
+            score += 8;
+          } else if (distToCenter < 35) {
+            score += 4;
+          }
         }
 
         // 4. Result type specificity bonus
@@ -987,8 +977,8 @@ export class LocationSearchAggregator {
         // 5. Source confidence
         score += item.confidence * 10;
 
-        // 6. City alignment
-        if (item.city?.toLowerCase() === city.name.toLowerCase()) {
+        // 6. Explicit city alignment bonus only when user explicitly included city name
+        if (hasExplicitCity && item.city?.toLowerCase() === city.name.toLowerCase()) {
           score += 15;
         }
 
@@ -1007,9 +997,8 @@ export class LocationSearchAggregator {
       return results[0];
     }
 
-    const { city } = detectCityContext(query, options);
     throw new Error(
-      `Couldn't find this place "${query}". Try a nearby landmark or select from suggestions (e.g., "${city.name}").`
+      `Location not found: "${query}". Please check the spelling or select a location from suggestions.`
     );
   }
 }

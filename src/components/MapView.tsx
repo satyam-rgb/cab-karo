@@ -5,6 +5,8 @@ import { LocationCoordinate } from '../types';
 interface MapViewProps {
   origin?: LocationCoordinate | null;
   destination?: LocationCoordinate | null;
+  selectedLocation?: LocationCoordinate | null;
+  selectionKey?: number;
   routeCoordinates?: LocationCoordinate[];
   isLoadingRoute?: boolean;
   routeError?: string | null;
@@ -13,9 +15,25 @@ interface MapViewProps {
   onMapClick?: (coord: LocationCoordinate) => void;
 }
 
+function isValidCoord(coord?: LocationCoordinate | null): coord is LocationCoordinate {
+  return Boolean(
+    coord &&
+      typeof coord.latitude === 'number' &&
+      typeof coord.longitude === 'number' &&
+      !isNaN(coord.latitude) &&
+      !isNaN(coord.longitude) &&
+      coord.latitude >= -90 &&
+      coord.latitude <= 90 &&
+      coord.longitude >= -180 &&
+      coord.longitude <= 180
+  );
+}
+
 export const MapView: React.FC<MapViewProps> = ({
   origin,
   destination,
+  selectedLocation = null,
+  selectionKey = 0,
   routeCoordinates = [],
   isLoadingRoute = false,
   routeError = null,
@@ -26,15 +44,23 @@ export const MapView: React.FC<MapViewProps> = ({
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const routePolylineRef = useRef<L.Polyline | null>(null);
+  const lastHandledSelectionKeyRef = useRef<number>(0);
 
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
     if (!mapInstanceRef.current) {
-      // Default initial view
+      const initialCenter: [number, number] = isValidCoord(selectedLocation)
+        ? [selectedLocation.latitude, selectedLocation.longitude]
+        : isValidCoord(origin)
+        ? [origin.latitude, origin.longitude]
+        : isValidCoord(destination)
+        ? [destination.latitude, destination.longitude]
+        : [21.1458, 79.0882];
+
       const map = L.map(mapContainerRef.current, {
-        center: [21.1458, 79.0882],
-        zoom: 12,
+        center: initialCenter,
+        zoom: 13,
         zoomControl: false,
         attributionControl: false
       });
@@ -60,7 +86,20 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, []);
 
-  // Update markers, polyline, and viewport whenever coordinates change
+  // Immediately move camera when user selects a pickup or destination location
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !isValidCoord(selectedLocation) || selectionKey === 0) return;
+
+    map.stop();
+    map.invalidateSize({ animate: false, pan: false });
+    map.flyTo([selectedLocation.latitude, selectedLocation.longitude], 15, {
+      animate: true,
+      duration: 0.6
+    });
+  }, [selectedLocation?.latitude, selectedLocation?.longitude, selectionKey]);
+
+  // Update markers, polyline, and viewport whenever coordinates or route change
   useEffect(() => {
     const map = mapInstanceRef.current;
     const markersLayer = markersLayerRef.current;
@@ -77,7 +116,7 @@ export const MapView: React.FC<MapViewProps> = ({
     const boundsLatLngs: L.LatLngExpression[] = [];
 
     // 2. Add Origin Marker (Green)
-    if (origin) {
+    if (isValidCoord(origin)) {
       const originIcon = L.divIcon({
         className: 'custom-map-icon',
         html: `
@@ -101,7 +140,7 @@ export const MapView: React.FC<MapViewProps> = ({
     }
 
     // 3. Add Destination Marker (Red)
-    if (destination) {
+    if (isValidCoord(destination)) {
       const destIcon = L.divIcon({
         className: 'custom-map-icon',
         html: `
@@ -124,12 +163,13 @@ export const MapView: React.FC<MapViewProps> = ({
       boundsLatLngs.push([destination.latitude, destination.longitude]);
     }
 
-    // Ensure map container dimensions are calibrated
-    map.invalidateSize();
+    map.invalidateSize({ animate: false, pan: false });
 
-    // 4. Draw Route Polyline & Fit Bounds
-    if (routeCoordinates && routeCoordinates.length > 0) {
-      const latlngs: [number, number][] = routeCoordinates.map((c) => [
+    // 4. Draw Route Polyline & Fit Viewport (only for multi-point road geometry, never a 2-point straight line)
+    const validRouteCoords = (routeCoordinates || []).filter(isValidCoord);
+
+    if (validRouteCoords.length > 2) {
+      const latlngs: [number, number][] = validRouteCoords.map((c) => [
         c.latitude,
         c.longitude
       ]);
@@ -142,21 +182,27 @@ export const MapView: React.FC<MapViewProps> = ({
       }).addTo(map);
 
       routePolylineRef.current = polyline;
+      map.stop();
       map.fitBounds(polyline.getBounds(), {
         padding: [60, 60],
         maxZoom: 16,
         animate: true
       });
+    } else if (selectionKey !== lastHandledSelectionKeyRef.current && isValidCoord(selectedLocation)) {
+      // Preserve immediate camera focus on newly selected location before route arrives
+      lastHandledSelectionKeyRef.current = selectionKey;
     } else if (boundsLatLngs.length > 1) {
+      map.stop();
       map.fitBounds(L.latLngBounds(boundsLatLngs), {
         padding: [60, 60],
         maxZoom: 16,
         animate: true
       });
     } else if (boundsLatLngs.length === 1) {
-      map.setView(boundsLatLngs[0], 14, { animate: true });
+      map.stop();
+      map.setView(boundsLatLngs[0], 15, { animate: true });
     }
-  }, [origin, destination, routeCoordinates, originLabel, destinationLabel]);
+  }, [origin, destination, routeCoordinates, originLabel, destinationLabel, selectedLocation, selectionKey]);
 
   return (
     <div className="relative w-full h-full min-h-[300px] overflow-hidden rounded-b-2xl shadow-inner bg-slate-100">

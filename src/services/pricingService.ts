@@ -1343,22 +1343,19 @@ export async function geocodeLocation(name: string, options?: any): Promise<Loca
     geocodeMemoryCache.set(cacheKey, result);
     return result;
   } catch (err: any) {
-    // Check emergency landmark table before throwing
-    for (const [key, coord] of Object.entries(EMERGENCY_OFFLINE_COORDS)) {
-      if (cacheKey === key || cacheKey.includes(key) || key.includes(cacheKey)) {
-        const result: LocationResult = {
-          query: rawQuery,
-          displayName: `${rawQuery} (Nagpur)`,
-          latitude: coord.latitude,
-          longitude: coord.longitude,
-          city: 'Nagpur',
-          state: 'Maharashtra',
-          source: 'landmark_table',
-          confidence: 0.9
-        };
-        geocodeMemoryCache.set(cacheKey, result);
-        return result;
-      }
+    // Only fall back to emergency offline coordinates on an exact normalized match
+    const exactCoord = EMERGENCY_OFFLINE_COORDS[cacheKey];
+    if (exactCoord) {
+      const result: LocationResult = {
+        query: rawQuery,
+        displayName: rawQuery,
+        latitude: exactCoord.latitude,
+        longitude: exactCoord.longitude,
+        source: 'landmark_table',
+        confidence: 0.9
+      };
+      geocodeMemoryCache.set(cacheKey, result);
+      return result;
     }
     throw err;
   }
@@ -1374,6 +1371,7 @@ export async function fetchLocationSuggestions(query: string, options?: any): Pr
 
   const results = await locationSearchService.search(clean, options);
   return results.map((r) => ({
+    ...r,
     query: clean,
     displayName: r.displayName,
     latitude: r.latitude,
@@ -1382,9 +1380,7 @@ export async function fetchLocationSuggestions(query: string, options?: any): Pr
     state: r.state,
     source: r.source,
     confidence: r.confidence,
-    placeType: r.type,
-    // preserve full search result
-    ...r
+    placeType: r.type
   }));
 }
 
@@ -1452,73 +1448,91 @@ export async function fetchOSRMRoute(
   routeSource: 'osrm_live' | 'routing_fallback';
   notice?: string;
 }> {
-  const latDiff = Math.abs(origin.latitude - destination.latitude);
-  const lonDiff = Math.abs(origin.longitude - destination.longitude);
+  const originLat = Number(origin.latitude);
+  const originLon = Number(origin.longitude);
+  const destLat = Number(destination.latitude);
+  const destLon = Number(destination.longitude);
+
+  const latDiff = Math.abs(originLat - destLat);
+  const lonDiff = Math.abs(originLon - destLon);
 
   if (latDiff < 0.0003 && lonDiff < 0.0003) {
     throw new Error('Pickup and destination locations are virtually identical. Please choose distinct locations.');
   }
 
-  try {
+  const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${originLon},${originLat};${destLon},${destLat}?overview=full&geometries=polyline`;
+
+  const attemptOSRM = async (url: string) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
 
-    const url = `https://router.project-osrm.org/route/v1/driving/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=polyline`;
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeoutId);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
 
-    if (response.ok) {
+      if (!response.ok) return null;
+
       const data = await response.json();
-      if (data && data.code === 'Ok' && data.routes && data.routes.length > 0) {
+      if (data && data.code === 'Ok' && Array.isArray(data.routes) && data.routes.length > 0) {
         const route = data.routes[0];
-        const rawDistKm = (route.distance as number) / 1000;
-        const distanceKm = Math.max(0.5, round2(rawDistKm));
-        const durationMinutes = Math.max(2, Math.round((route.duration as number) / 60));
-        const polyline = route.geometry as string;
-        const coordinates = decodePolyline(polyline);
+        const rawDistKm = Number(route.distance) / 1000;
+        const distanceKm = Math.max(0.1, round2(rawDistKm));
+        const durationMinutes = Math.max(1, Math.round(Number(route.duration) / 60));
 
-        if (coordinates && coordinates.length > 1 && distanceKm > 0) {
+        let coordinates: LocationCoordinate[] = [];
+        if (typeof route.geometry === 'string') {
+          coordinates = decodePolyline(route.geometry);
+        } else if (route.geometry && Array.isArray(route.geometry.coordinates)) {
+          coordinates = route.geometry.coordinates.map((pt: [number, number]) => ({
+            latitude: Number(pt[1]),
+            longitude: Number(pt[0])
+          }));
+        }
+
+        if (coordinates.length > 2 && distanceKm > 0) {
           return {
             distanceKm,
             durationMinutes,
             coordinates,
-            isLiveRoute: true,
-            routeSource: 'osrm_live'
+            isLiveRoute: true as const,
+            routeSource: 'osrm_live' as const
           };
         }
       }
+    } catch (_e) {
+      clearTimeout(timeoutId);
     }
-  } catch (_e) {
-    // Fallback if public OSRM is unreachable
+    return null;
+  };
+
+  // Primary OSRM request
+  const firstAttempt = await attemptOSRM(osrmUrl);
+  if (firstAttempt) {
+    return firstAttempt;
   }
 
-  // Fallback: Haversine distance with explicit fallback indicator
-  const R = 6371; // Earth radius in km
-  const dLat = ((destination.latitude - origin.latitude) * Math.PI) / 180;
-  const dLon = ((destination.longitude - origin.longitude) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((origin.latitude * Math.PI) / 180) *
-      Math.cos((destination.latitude * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  const rawDist = R * c;
+  // Retry OSRM once after a short delay
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const retryAttempt = await attemptOSRM(osrmUrl);
+  if (retryAttempt) {
+    return retryAttempt;
+  }
 
+  // Internal-only fallback metrics for pricing engine; never return a 2-point straight line for map rendering
+  const rawDist = haversineDistanceKm(originLat, originLon, destLat, destLon);
   if (rawDist < 0.05) {
     throw new Error('Route distance is too short to compute a cab route.');
   }
 
-  const roadDist = Math.max(0.8, round2(rawDist * 1.35));
-  // Average city driving speed 32 km/h
-  const roadDuration = Math.max(3, Math.round((roadDist / 32) * 60));
+  const internalEstimateKm = Math.max(0.5, round2(rawDist));
+  const internalEstimateDuration = Math.max(2, Math.round((internalEstimateKm / 30) * 60));
 
   return {
-    distanceKm: roadDist,
-    durationMinutes: roadDuration,
-    coordinates: [origin, destination],
+    distanceKm: internalEstimateKm,
+    durationMinutes: internalEstimateDuration,
+    coordinates: [],
     isLiveRoute: false,
     routeSource: 'routing_fallback',
-    notice: 'Live OSRM routing service was unavailable. Displaying straight-line path fallback.'
+    notice: 'Road route temporarily unavailable'
   };
 }
